@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[22016,["/_next/static/chunks/149fhius9cd_d.js","/_next/static/chunks/0d3shmwh5_nmn.js","/_next/static/chunks/0ka051yepewro.js"],""]
+3:I[97367,["/_next/static/chunks/149fhius9cd_d.js","/_next/static/chunks/0d3shmwh5_nmn.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"mx-auto flex min-h-screen max-w-4xl flex-col items-center justify-center gap-6 px-6 text-center","children":[["$","h1",null,{"className":"text-4xl font-bold tracking-tight","children":"AI Resume Screening Platform"}],["$","p",null,{"className":"text-slate-600","children":"Serverless hiring intelligence for recruiters and candidates."}],["$","div",null,{"className":"flex gap-3","children":[["$","$L2",null,{"className":"rounded bg-blue-600 px-4 py-2 text-white","href":"/login","children":"Login"}],["$","$L2",null,{"className":"rounded border border-slate-300 px-4 py-2","href":"/signup","children":"Sign Up"}]]}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/0ka051yepewro.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"VQYd8AVUFzI-kYflIqv8s"}
+5:null
