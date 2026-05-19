@@ -3,7 +3,21 @@ dist/
 build/
 .env.*
 .env
+!**/.env.example
 debug.log
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Frontend local build/log artifacts
+frontend/.next/
+frontend/devserver.log
+frontend/devserver.err.log
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+infrastructure/terraform/modules/foundation/.artifacts/

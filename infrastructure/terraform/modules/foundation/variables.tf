@@ -1,0 +1,5 @@
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "aws_region" { type = string }
+variable "tags" { type = map(string) }
+variable "resume_bucket_force_destroy" { type = bool }
