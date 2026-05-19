@@ -1,0 +1,42 @@
+{
+  "api_gateway_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "cognito_user_pool_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "cognito_web_client_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "dynamodb_table_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "parse_resume_lambda_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "resume_bucket_name": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "resume_processing_dlq_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  },
+  "resume_processing_queue_url": {
+    "sensitive": false,
+    "type": "string",
+    "value": "REPLACE_ME"
+  }
+}

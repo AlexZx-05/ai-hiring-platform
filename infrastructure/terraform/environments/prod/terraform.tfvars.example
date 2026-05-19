@@ -1,0 +1,7 @@
+project_name = "ai-hiring-platform"
+environment  = "prod"
+aws_region   = "ap-south-1"
+owner        = "platform-team"
+
+# Must remain false in production.
+resume_bucket_force_destroy = false
