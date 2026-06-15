@@ -1,5 +1,7 @@
 # DynamoDB Single-Table Design
 
+Locked for MVP Week 1 on: 2026-05-20
+
 ## Table
 - Name pattern: `${project}-${env}-core`
 - Keys:
@@ -57,3 +59,10 @@ This forces all writes/reads to be tenant-scoped.
 - Never write records without `tenantId`.
 - Never query without tenant-scoped key prefix.
 - Keep analysis versioned: `ANALYSIS#{resumeId}#v#{n}` for model updates.
+
+## Non-Breaking Key Conventions (Locked)
+- Base primary key attributes remain `PK` and `SK`.
+- Tenant prefix remains mandatory in every partition key: `TENANT#{tenantId}#...`.
+- Ranking access pattern remains on `GSI1PK`/`GSI1SK` with `GSI1` index name.
+- Skill/experience filtering remains on `GSI2PK`/`GSI2SK` with `GSI2` index name.
+- Existing key token patterns (`CANDIDATE`, `JOB`, `RESUME`, `ANALYSIS`, `QUESTIONS`) are append-only; do not rename in-place.

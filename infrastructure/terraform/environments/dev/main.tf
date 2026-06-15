@@ -1,6 +1,10 @@
 terraform {
   required_version = ">= 1.6.0"
 
+  # Configure backend with `terraform init -backend-config=backend.hcl`.
+  # Keep local state only as a temporary fallback for quick experiments.
+  backend "s3" {}
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

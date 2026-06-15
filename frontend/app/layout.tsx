@@ -1,18 +1,24 @@
-import "./globals.css";
-import { AppProviders } from "@/components/providers";
 import type { Metadata } from "next";
-import { ReactNode } from "react";
+import { Geist } from "next/font/google";
+import "./globals.css";
+import { Providers } from "@/components/providers";
+
+const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AI Hiring Platform",
-  description: "AI Resume Screening and Interview Platform"
+  description: "Serverless hiring intelligence",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body>
-        <AppProviders>{children}</AppProviders>
+      <body className={geist.className}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

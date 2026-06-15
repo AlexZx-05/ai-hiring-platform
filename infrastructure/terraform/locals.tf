@@ -1,7 +1,7 @@
 locals {
   common_tags = {
-    Project = var.project_name
-    Owner   = var.owner
+    Project   = var.project_name
+    Owner     = var.owner
     ManagedBy = "terraform"
   }
 }

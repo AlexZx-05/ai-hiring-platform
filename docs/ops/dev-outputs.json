@@ -1,0 +1,13 @@
+{
+  "captured_on": "REPLACE_AFTER_TERRAFORM_APPLY_YYYY-MM-DD",
+  "environment": "dev",
+  "region": "ap-south-1",
+  "api_gateway_id": "REPLACE_ME",
+  "cognito_user_pool_id": "REPLACE_ME",
+  "cognito_web_client_id": "REPLACE_ME",
+  "dynamodb_table_name": "REPLACE_ME",
+  "parse_resume_lambda_name": "REPLACE_ME",
+  "resume_bucket_name": "REPLACE_ME",
+  "resume_processing_dlq_url": "REPLACE_ME",
+  "resume_processing_queue_url": "REPLACE_ME"
+}

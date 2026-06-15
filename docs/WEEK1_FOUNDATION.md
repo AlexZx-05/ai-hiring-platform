@@ -1,5 +1,7 @@
 # Week 1 Foundation
 
+Approved on: 2026-05-20
+
 ## MVP Scope (Frozen)
 - Candidate resume upload
 - AI scoring with explainability
