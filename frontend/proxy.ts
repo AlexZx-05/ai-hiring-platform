@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const protectedRoutes = ["/dashboard", "/upload", "/candidates", "/analytics"];
-  const recruiterOnlyRoutes = ["/candidates", "/analytics"];
-  const candidateOnlyRoutes = ["/upload"];
+  const protectedRoutes     = ["/dashboard", "/upload", "/candidates", "/jobs", "/applications", "/recruiter", "/analytics", "/rankings"];
+  const recruiterOnlyRoutes = ["/recruiter", "/analytics", "/rankings"];
+  const candidateOnlyRoutes = ["/upload", "/candidates", "/jobs", "/applications"];
+
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
 
   if (isProtected) {
@@ -45,6 +46,10 @@ export const config = {
     "/dashboard/:path*",
     "/upload/:path*",
     "/candidates/:path*",
+    "/jobs/:path*",
+    "/applications/:path*",
+    "/recruiter/:path*",
     "/analytics/:path*",
+    "/rankings/:path*",
   ],
 };

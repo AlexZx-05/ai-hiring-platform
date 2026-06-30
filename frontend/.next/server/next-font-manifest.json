@@ -3,7 +3,22 @@
     "[project]/app/_not-found/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
+    "[project]/app/applications/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/candidates/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
     "[project]/app/dashboard/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/forgot-password/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/jobs/[id]/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/jobs/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
     "[project]/app/login/page": [
@@ -12,10 +27,31 @@
     "[project]/app/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
+    "[project]/app/rankings/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/recruiter/candidates/[id]/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/recruiter/jobs/[id]/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/recruiter/jobs/create/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/recruiter/jobs/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/signin/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
     "[project]/app/signup/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
     "[project]/app/upload/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/verify-email/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ]
   },

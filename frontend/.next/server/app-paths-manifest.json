@@ -1,9 +1,21 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/applications/page": "app/applications/page.js",
+  "/candidates/page": "app/candidates/page.js",
   "/dashboard/page": "app/dashboard/page.js",
+  "/forgot-password/page": "app/forgot-password/page.js",
+  "/jobs/[id]/page": "app/jobs/[id]/page.js",
+  "/jobs/page": "app/jobs/page.js",
   "/login/page": "app/login/page.js",
   "/page": "app/page.js",
+  "/rankings/page": "app/rankings/page.js",
+  "/recruiter/candidates/[id]/page": "app/recruiter/candidates/[id]/page.js",
+  "/recruiter/jobs/[id]/page": "app/recruiter/jobs/[id]/page.js",
+  "/recruiter/jobs/create/page": "app/recruiter/jobs/create/page.js",
+  "/recruiter/jobs/page": "app/recruiter/jobs/page.js",
+  "/signin/page": "app/signin/page.js",
   "/signup/page": "app/signup/page.js",
-  "/upload/page": "app/upload/page.js"
+  "/upload/page": "app/upload/page.js",
+  "/verify-email/page": "app/verify-email/page.js"
 }

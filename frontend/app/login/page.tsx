@@ -105,7 +105,7 @@ export default function LoginPage() {
                 onClick={() => router.push("/signin")}
                 className="rounded-lg bg-blue-600 px-8 py-4 font-semibold transition hover:bg-blue-500"
               >
-                Login with AWS Cognito
+                Get Started
               </button>
 
               <Link

@@ -11,9 +11,12 @@ import {
 
 const navItems = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/jobs", label: "Jobs", audience: "candidate" },
+  { href: "/applications", label: "Applications", audience: "candidate" },
+  { href: "/recruiter/jobs", label: "Jobs", audience: "recruiter" },
   { href: "/upload", label: "Upload" },
-  { href: "/candidates", label: "Candidates" },
-  { href: "/analytics", label: "Analytics" },
+  { href: "/candidates", label: "Candidates", audience: "recruiter" },
+  { href: "/analytics", label: "Analytics", audience: "recruiter" },
 ];
 
 export function DashboardHeader() {
@@ -26,8 +29,8 @@ export function DashboardHeader() {
     "Recruiter";
   const visibleNavItems =
     role === "candidate"
-      ? navItems.filter((item) => item.href !== "/candidates" && item.href !== "/analytics")
-      : navItems;
+      ? navItems.filter((item) => item.audience !== "recruiter")
+      : navItems.filter((item) => item.audience !== "candidate");
 
   const onLogout = async () => {
     clearAuthArtifacts();

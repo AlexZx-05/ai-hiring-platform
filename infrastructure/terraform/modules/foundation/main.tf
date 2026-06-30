@@ -525,8 +525,21 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  schema {
+    name                = "role"
+    attribute_data_type = "String"
+    mutable             = true
+    required            = false
+
+    string_attribute_constraints {
+      min_length = 1
+      max_length = 20
+    }
+  }
+
   tags = var.tags
 }
+
 
 resource "aws_cognito_user_pool_client" "web" {
   name         = "${var.project_name}-${var.environment}-web-client"
