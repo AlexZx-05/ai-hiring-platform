@@ -1,28 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowLeft, Briefcase, FileText, RefreshCcw } from "lucide-react";
-import { listApplications, type Application } from "@/services/jobs";
+import { useEffect, useMemo, useState } from "react";
+import { Briefcase, FileText, RefreshCcw } from "lucide-react";
+import { listApplications, listJobs, type Application, type Job } from "@/services/jobs";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
 const statusStyles: Record<Application["status"], string> = {
-  SUBMITTED: "bg-blue-50 text-blue-700",
+  APPLIED: "bg-blue-50 text-blue-700",
   PARSING: "bg-amber-50 text-amber-700",
+  AI_REVIEWED: "bg-cyan-50 text-cyan-700",
   UNDER_REVIEW: "bg-indigo-50 text-indigo-700",
   SHORTLISTED: "bg-green-50 text-green-700",
+  INTERVIEW_RECOMMENDED: "bg-violet-50 text-violet-700",
+  INTERVIEW_SCHEDULED: "bg-violet-50 text-violet-700",
+  OFFER: "bg-emerald-50 text-emerald-700",
+  HIRED: "bg-emerald-100 text-emerald-800",
   REJECTED: "bg-rose-50 text-rose-700",
 };
 
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadApplications = () => {
     setLoading(true);
     setError(null);
-    listApplications()
-      .then(setApplications)
+    Promise.all([listApplications(), listJobs()])
+      .then(([applicationItems, jobsResult]) => {
+        setApplications(applicationItems);
+        setJobs(jobsResult.jobs);
+      })
       .catch((err) => {
         const message =
           (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -36,37 +46,26 @@ export default function ApplicationsPage() {
     loadApplications();
   }, []);
 
-  return (
-    <main className="min-h-screen bg-gray-50">
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
-          <div>
-            <Link href="/jobs" className="mb-3 flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-900">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to jobs
-            </Link>
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700">
-                <FileText className="h-4 w-4 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold text-gray-900">My Applications</h1>
-                <p className="text-xs text-gray-500">Track your submitted job applications.</p>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={loadApplications}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            <RefreshCcw className="h-3.5 w-3.5" />
-            Refresh
-          </button>
-        </div>
-      </section>
+  const jobById = useMemo(
+    () => new Map(jobs.map((job) => [job.jobId, job])),
+    [jobs]
+  );
 
-      <section className="mx-auto max-w-5xl px-5 py-6">
+  return (
+    <WorkspaceShell
+      title="My Applications"
+      subtitle="Track where every application stands after resume upload and AI screening."
+      actions={
+        <button
+          type="button"
+          onClick={loadApplications}
+          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <RefreshCcw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
+      }
+    >
         {error ? (
           <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
@@ -84,7 +83,10 @@ export default function ApplicationsPage() {
               <span>Status</span>
               <span>Submitted</span>
             </div>
-            {applications.map((application) => (
+            {applications.map((application) => {
+              const job = jobById.get(application.jobId);
+
+              return (
               <div
                 key={application.applicationId}
                 className="grid grid-cols-[1fr_150px_180px] items-center border-b border-gray-50 px-4 py-4 last:border-0"
@@ -92,13 +94,17 @@ export default function ApplicationsPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <Briefcase className="h-4 w-4 flex-shrink-0 text-gray-400" />
-                    <p className="truncate text-sm font-medium text-gray-900">
-                      Job {application.jobId}
-                    </p>
+                    <Link
+                      href={`/jobs/${application.jobId}`}
+                      className="truncate text-sm font-medium text-gray-900 hover:text-blue-700"
+                    >
+                      {job?.title ?? `Job ${application.jobId}`}
+                    </Link>
                   </div>
                   <p className="mt-1 truncate text-xs text-gray-500">
-                    Resume {application.resumeId}
+                    {job ? `${job.department} · ${job.location}` : `Resume ${application.resumeId}`}
                   </p>
+                  {application.processingError ? <p className="mt-1 text-xs text-rose-600">Resume processing error: {application.processingError}</p> : null}
                 </div>
                 <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyles[application.status]}`}>
                   {application.status.replace("_", " ")}
@@ -107,7 +113,7 @@ export default function ApplicationsPage() {
                   {new Date(application.createdAt).toLocaleString()}
                 </span>
               </div>
-            ))}
+            )})}
           </div>
         ) : (
           <div className="rounded-xl border border-gray-100 bg-white p-8 text-center">
@@ -122,7 +128,6 @@ export default function ApplicationsPage() {
             </Link>
           </div>
         )}
-      </section>
-    </main>
+    </WorkspaceShell>
   );
 }

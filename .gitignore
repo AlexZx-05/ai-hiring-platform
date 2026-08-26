@@ -1,5 +1,6 @@
 node_modules/
 dist/
+backend/.lambda-dist/
 build/
 .env.*
 .env
@@ -19,5 +20,9 @@ frontend/devserver.err.log
 **/.terraform.lock.hcl
 **/*.tfstate
 **/*.tfstate.*
+**/*.auto.tfvars
+**/*.auto.tfvars.json
 **/crash.log
 infrastructure/terraform/modules/foundation/.artifacts/
+*.tsbuildinfo
+**/*.tfplan

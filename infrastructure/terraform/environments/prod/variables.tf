@@ -22,3 +22,9 @@ variable "resume_bucket_force_destroy" {
   type    = bool
   default = false
 }
+
+variable "xai_api_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}

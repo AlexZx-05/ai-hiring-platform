@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { confirmSignUp, resendSignUpCode, signUp } from "aws-amplify/auth";
 import {
   BarChart3,
@@ -16,8 +16,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { getCognitoAuthorizeUrl } from "@/services/auth";
-
-type Role = "candidate" | "recruiter";
 
 export default function SignupPage() {
   const [step, setStep] = useState<"signup" | "verify">("signup");
@@ -35,22 +33,11 @@ export default function SignupPage() {
     email: "",
     password: "",
     confirmPassword: "",
-    tenantId: "",
-    role: "candidate" as Role,
+    role: "candidate",
   });
 
-  useEffect(() => {
-    const role = new URLSearchParams(window.location.search).get("role");
-    if (role === "candidate" || role === "recruiter") {
-      setForm((previous) => ({ ...previous, role }));
-    }
-  }, []);
-
   const helperText = useMemo(() => {
-    if (form.role === "recruiter") {
-      return "Recruiter access may require admin approval after signup.";
-    }
-    return "Candidate accounts can upload resumes and apply to jobs.";
+    return "Self-service signup creates a candidate account. Recruiter access is issued by an organization administrator through an invitation.";
   }, [form.role]);
 
   const onSignup = async (e: FormEvent<HTMLFormElement>) => {
@@ -75,11 +62,7 @@ export default function SignupPage() {
           userAttributes: {
             email: form.email.trim().toLowerCase(),
             name: fullName,
-            "custom:role": form.role,
-            "custom:tenantId": form.tenantId.trim(),
-          },
-          clientMetadata: {
-            role: form.role,
+            // Privileged role and tenant claims are intentionally never accepted from the browser.
           },
         },
       });
@@ -266,43 +249,7 @@ export default function SignupPage() {
                 />
               </div>
 
-              <div>
-                <p className="text-xs font-semibold text-gray-800">
-                  Choose your workspace
-                </p>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  <RoleCard
-                    active={form.role === "recruiter"}
-                    title="Recruiter"
-                    description="Post jobs, review candidates, and manage hiring pipelines."
-                    onClick={() =>
-                      setForm((p) => ({ ...p, role: "recruiter" }))
-                    }
-                  />
-                  <RoleCard
-                    active={form.role === "candidate"}
-                    title="Candidate"
-                    description="Apply to roles, upload resumes, and track applications."
-                    onClick={() =>
-                      setForm((p) => ({ ...p, role: "candidate" }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <TextInput
-                label={
-                  form.role === "recruiter" ? "Company ID" : "Talent Pool ID"
-                }
-                icon={ShieldCheck}
-                value={form.tenantId}
-                placeholder={form.role === "recruiter" ? "techcorp" : "public"}
-                onChange={(value) =>
-                  setForm((p) => ({ ...p, tenantId: value }))
-                }
-                required
-              />
-              <p className="-mt-2 text-xs text-gray-500">{helperText}</p>
+              <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-gray-600">{helperText}</p>
 
               <label className="flex items-start gap-2 text-xs leading-5 text-gray-500">
                 <input

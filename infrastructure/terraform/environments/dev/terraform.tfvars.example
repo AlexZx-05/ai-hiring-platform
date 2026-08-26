@@ -5,3 +5,6 @@ owner        = "platform-team"
 
 # Only keep true for non-production.
 resume_bucket_force_destroy = true
+
+# Set this from a private tfvars file or TF_VAR_xai_api_key.
+xai_api_key = ""

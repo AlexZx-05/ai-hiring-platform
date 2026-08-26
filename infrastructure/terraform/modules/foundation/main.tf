@@ -98,10 +98,27 @@ resource "aws_dynamodb_table" "hiring_platform" {
     type = "S"
   }
 
+  attribute {
+    name = "GSI3PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "GSI3SK"
+    type = "S"
+  }
+
   global_secondary_index {
     name            = "GSI1"
     hash_key        = "GSI1PK"
     range_key       = "GSI1SK"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "GSI3"
+    hash_key        = "GSI3PK"
+    range_key       = "GSI3SK"
     projection_type = "ALL"
   }
 
@@ -203,6 +220,12 @@ data "aws_iam_policy_document" "lambda_parse_resume" {
     ]
     resources = ["*"]
   }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = ["arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-${var.environment}-application-analysis"]
+  }
 }
 
 resource "aws_iam_role_policy" "lambda_parse_resume" {
@@ -223,14 +246,17 @@ data "archive_file" "parse_resume_source" {
         StartDocumentTextDetectionCommand,
         GetDocumentTextDetectionCommand
       } from "@aws-sdk/client-textract";
-      import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
+      import { DynamoDBClient, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+      import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 
       const REGION = process.env.AWS_REGION || "ap-south-1";
       const TABLE_NAME = process.env.TABLE_NAME;
+      const APPLICATION_ANALYSIS_FUNCTION_NAME = process.env.APPLICATION_ANALYSIS_FUNCTION_NAME;
 
       const s3Client = new S3Client({ region: REGION });
       const textractClient = new TextractClient({ region: REGION });
       const ddb = new DynamoDBClient({ region: REGION });
+      const lambda = new LambdaClient({ region: REGION });
 
       const parseObjectKey = (objectKey) => {
         const parts = objectKey.split("/");
@@ -356,6 +382,25 @@ data "archive_file" "parse_resume_source" {
         );
       };
 
+      const triggerApplicationAnalysis = async (resumeId) => {
+        if (!APPLICATION_ANALYSIS_FUNCTION_NAME) return;
+        const applications = await ddb.send(new QueryCommand({
+          TableName: TABLE_NAME,
+          IndexName: "GSI3",
+          KeyConditionExpression: "GSI3PK = :pk",
+          ExpressionAttributeValues: { ":pk": { S: `RESUME#$${resumeId}` } }
+        }));
+        for (const application of applications.Items || []) {
+          const applicationId = application.applicationId?.S;
+          if (!applicationId) continue;
+          await lambda.send(new InvokeCommand({
+            FunctionName: APPLICATION_ANALYSIS_FUNCTION_NAME,
+            InvocationType: "Event",
+            Payload: new TextEncoder().encode(JSON.stringify({ applicationId }))
+          }));
+        }
+      };
+
       const processS3Record = async (record) => {
         const bucketName = record?.s3?.bucket?.name;
         const objectKey = decodeURIComponent(record?.s3?.object?.key || "").replace(/\\+/g, " ");
@@ -412,6 +457,7 @@ data "archive_file" "parse_resume_source" {
             extractionVersion,
             parsedAt
           });
+          await triggerApplicationAnalysis(ids.resumeId);
         } catch (error) {
           await putParseStatus(pk, ids.tenantId, ids.candidateId, ids.resumeId, "FAILED", {
             message: error instanceof Error ? error.message : "Unknown parse failure"
@@ -453,6 +499,7 @@ resource "aws_lambda_function" "parse_resume" {
       TABLE_NAME           = aws_dynamodb_table.hiring_platform.name
       RESUME_BUCKET_NAME   = aws_s3_bucket.resumes.id
       PROCESSING_QUEUE_URL = aws_sqs_queue.resume_processing.id
+      APPLICATION_ANALYSIS_FUNCTION_NAME = "${var.project_name}-${var.environment}-application-analysis"
     }
   }
 
@@ -556,8 +603,8 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "phone", "aws.cognito.signin.user.admin"]
   supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["http://localhost:3000/login"]
-  logout_urls                          = ["http://localhost:3000/login"]
+  callback_urls                        = ["http://localhost:3000/login", "http://localhost:3001/login"]
+  logout_urls                          = ["http://localhost:3000/login", "http://localhost:3001/login"]
 }
 
 resource "aws_iam_role" "lambda_analyze_resume" {
@@ -570,6 +617,15 @@ resource "aws_cloudwatch_log_group" "lambda_analyze_resume" {
   name              = "/aws/lambda/${var.project_name}-${var.environment}-analyze-resume"
   retention_in_days = 30
   tags              = var.tags
+}
+
+resource "aws_secretsmanager_secret" "xai_api" {
+  name                    = "${var.project_name}/${var.environment}/xai-api"
+  recovery_window_in_days = 7
+
+  tags = merge(var.tags, {
+    Name = "${var.project_name}-${var.environment}-xai-api"
+  })
 }
 
 data "aws_iam_policy_document" "lambda_analyze_resume" {
@@ -594,7 +650,7 @@ data "aws_iam_policy_document" "lambda_analyze_resume" {
   statement {
     effect = "Allow"
     actions = [
-      "bedrock:InvokeModel"
+      "cognito-idp:GetUser"
     ]
     resources = ["*"]
   }
@@ -602,9 +658,9 @@ data "aws_iam_policy_document" "lambda_analyze_resume" {
   statement {
     effect = "Allow"
     actions = [
-      "cognito-idp:GetUser"
+      "secretsmanager:GetSecretValue"
     ]
-    resources = ["*"]
+    resources = [aws_secretsmanager_secret.xai_api.arn]
   }
 }
 
@@ -621,16 +677,20 @@ data "archive_file" "analyze_resume_source" {
     filename = "index.mjs"
     content  = <<-EOT
       import { DynamoDBClient, QueryCommand, PutItemCommand } from "@aws-sdk/client-dynamodb";
-      import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
+      import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
       import { CognitoIdentityProviderClient, GetUserCommand } from "@aws-sdk/client-cognito-identity-provider";
 
       const REGION = process.env.AWS_REGION || "ap-south-1";
       const TABLE_NAME = process.env.TABLE_NAME;
-      const BEDROCK_MODEL_ID = process.env.BEDROCK_MODEL_ID || "amazon.nova-lite-v1:0";
+      const XAI_API_KEY = process.env.XAI_API_KEY || "";
+      const XAI_API_URL = process.env.XAI_API_URL || "https://api.x.ai/v1/chat/completions";
+      const XAI_MODEL_ID = process.env.XAI_MODEL_ID || "grok-3-mini";
+      const XAI_SECRET_ARN = process.env.XAI_SECRET_ARN || "";
 
       const ddb = new DynamoDBClient({ region: REGION });
-      const bedrock = new BedrockRuntimeClient({ region: REGION });
+      const secrets = new SecretsManagerClient({ region: REGION });
       const cognitoClient = new CognitoIdentityProviderClient({ region: REGION });
+      let cachedXaiKey = null;
 
       const corsHeaders = {
         "Access-Control-Allow-Origin": "http://localhost:3000",
@@ -673,8 +733,7 @@ data "archive_file" "analyze_resume_source" {
       };
 
       const modelPrompt = (resumeText, jobRequirements = "") => `
-You are an ATS scoring engine.
-Given the resume text and optional job requirements, return strict JSON:
+You are an enterprise ATS scoring engine. Compare the resume against the job description and return strict JSON only:
 {
   "atsScore": number (0-100),
   "matchedSkills": string[],
@@ -682,38 +741,95 @@ Given the resume text and optional job requirements, return strict JSON:
   "confidence": number (0-1),
   "summary": string
 }
+Score should prioritize hard skills, role responsibilities, seniority, domain fit, and evidence quality. Do not invent resume facts.
 Resume:
 $${resumeText.slice(0, 12000)}
 Job Requirements:
 $${jobRequirements.slice(0, 6000)}
 `;
 
-      const invokeBedrock = async (resumeText, jobRequirements) => {
+      const parseModelJson = (text) => {
+        const cleaned = String(text || "{}")
+          .replace(/^```json\\s*/i, "")
+          .replace(/^```\\s*/i, "")
+          .replace(/```$/i, "")
+          .trim();
+        try {
+          return JSON.parse(cleaned);
+        } catch {
+          const match = cleaned.match(/\\{[\\s\\S]*\\}/);
+          return match ? JSON.parse(match[0]) : {};
+        }
+      };
+
+      const getXaiApiKey = async () => {
+        if (cachedXaiKey) return cachedXaiKey;
+        if (XAI_SECRET_ARN) {
+          const response = await secrets.send(
+            new GetSecretValueCommand({ SecretId: XAI_SECRET_ARN })
+          );
+          const raw = response.SecretString || "";
+          try {
+            const parsed = JSON.parse(raw);
+            cachedXaiKey = String(parsed.XAI_API_KEY || parsed.apiKey || parsed.key || "").trim();
+          } catch {
+            cachedXaiKey = raw.trim();
+          }
+        }
+        if (!cachedXaiKey) {
+          cachedXaiKey = XAI_API_KEY.trim();
+        }
+        return cachedXaiKey;
+      };
+
+      const invokeGrok = async (resumeText, jobRequirements) => {
+        const apiKey = await getXaiApiKey();
+        if (!apiKey) {
+          throw new Error("XAI_API_KEY is not configured");
+        }
+
         const payload = {
-          messages: [{ role: "user", content: [{ text: modelPrompt(resumeText, jobRequirements) }] }],
-          inferenceConfig: { max_new_tokens: 600, temperature: 0.2 }
+          model: XAI_MODEL_ID,
+          temperature: 0.1,
+          max_tokens: 700,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: "Return only valid JSON for resume-to-job screening. No markdown."
+            },
+            {
+              role: "user",
+              content: modelPrompt(resumeText, jobRequirements)
+            }
+          ]
         };
 
-        const response = await bedrock.send(
-          new InvokeModelCommand({
-            modelId: BEDROCK_MODEL_ID,
-            contentType: "application/json",
-            accept: "application/json",
-            body: JSON.stringify(payload)
-          })
-        );
+        const response = await fetch(XAI_API_URL, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer $${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
 
-        const raw = JSON.parse(new TextDecoder().decode(response.body));
-        const text = raw?.output?.message?.content?.[0]?.text || "{}";
+        const rawText = await response.text();
+        if (!response.ok) {
+          throw new Error(`Grok API failed with $${response.status}: $${rawText.slice(0, 300)}`);
+        }
+
+        const raw = JSON.parse(rawText);
+        const text = raw?.choices?.[0]?.message?.content || "{}";
         try {
-          return JSON.parse(text);
+          return parseModelJson(text);
         } catch {
           return {
             atsScore: 0,
             matchedSkills: [],
             missingSkills: [],
             confidence: 0,
-            summary: "Bedrock output was not valid JSON."
+            summary: "Grok output was not valid JSON."
           };
         }
       };
@@ -798,15 +914,22 @@ $${jobRequirements.slice(0, 6000)}
           });
         }
 
-        const analysis = await invokeBedrock(String(latestExtraction.rawText?.S || ""), jobRequirements);
+        let analysis;
+        try {
+          analysis = await invokeGrok(String(latestExtraction.rawText?.S || ""), jobRequirements);
+        } catch (error) {
+          return json(502, {
+            message: error instanceof Error ? error.message : "Grok analysis failed"
+          });
+        }
         const analyzedAt = new Date().toISOString();
         const analysisVersion = Date.now().toString();
 
         const normalized = {
-          atsScore: Number.isFinite(Number(analysis.atsScore)) ? Number(analysis.atsScore) : 0,
-          matchedSkills: Array.isArray(analysis.matchedSkills) ? analysis.matchedSkills.map(String) : [],
-          missingSkills: Array.isArray(analysis.missingSkills) ? analysis.missingSkills.map(String) : [],
-          confidence: Number.isFinite(Number(analysis.confidence)) ? Number(analysis.confidence) : 0,
+          atsScore: Math.max(0, Math.min(100, Number.isFinite(Number(analysis.atsScore)) ? Number(analysis.atsScore) : 0)),
+          matchedSkills: Array.isArray(analysis.matchedSkills) ? analysis.matchedSkills.map(String).slice(0, 20) : [],
+          missingSkills: Array.isArray(analysis.missingSkills) ? analysis.missingSkills.map(String).slice(0, 20) : [],
+          confidence: Math.max(0, Math.min(1, Number.isFinite(Number(analysis.confidence)) ? Number(analysis.confidence) : 0)),
           summary: String(analysis.summary || "No summary generated.")
         };
 
@@ -826,7 +949,7 @@ $${jobRequirements.slice(0, 6000)}
               resumeId: { S: resumeId },
               analyzedAt: { S: analyzedAt },
               analysisVersion: { S: analysisVersion },
-              modelId: { S: BEDROCK_MODEL_ID },
+              modelId: { S: XAI_MODEL_ID },
               extractionSk: { S: latestExtraction.SK?.S || "" },
               atsScore: { N: normalized.atsScore.toString() },
               matchedSkills: { S: JSON.stringify(normalized.matchedSkills) },
@@ -860,8 +983,11 @@ resource "aws_lambda_function" "analyze_resume" {
 
   environment {
     variables = {
-      TABLE_NAME       = aws_dynamodb_table.hiring_platform.name
-      BEDROCK_MODEL_ID = "amazon.nova-lite-v1:0"
+      TABLE_NAME     = aws_dynamodb_table.hiring_platform.name
+      XAI_API_URL    = "https://api.x.ai/v1/chat/completions"
+      XAI_MODEL_ID   = "grok-3-mini"
+      XAI_SECRET_ARN = aws_secretsmanager_secret.xai_api.arn
+      XAI_API_KEY    = var.xai_api_key
     }
   }
 
@@ -906,6 +1032,443 @@ resource "aws_api_gateway_authorizer" "cognito" {
   type            = "COGNITO_USER_POOLS"
   provider_arns   = [aws_cognito_user_pool.main.arn]
   identity_source = "method.request.header.Authorization"
+}
+
+# The backend is bundled from its TypeScript source by `npm run build` in backend/.
+# Terraform packages the resulting, self-contained Lambda bundles; CI must run that
+# command before `terraform plan` or `terraform apply`.
+locals {
+  backend_api_lambdas = {
+    jobs = {
+      artifact = "jobs"
+      name     = "jobs"
+      timeout  = 15
+    }
+    applications = {
+      artifact = "applications"
+      name     = "applications"
+      timeout  = 15
+    }
+    recruiter = {
+      artifact = "recruiter"
+      name     = "recruiter"
+      timeout  = 30
+    }
+    dashboard = {
+      artifact = "recruiterDashboard"
+      name     = "recruiter-dashboard"
+      timeout  = 15
+    }
+    public_jobs = {
+      artifact = "publicJobs"
+      name     = "public-jobs"
+      timeout  = 15
+    }
+    application_analysis = {
+      artifact = "applicationAnalysis"
+      name     = "application-analysis"
+      timeout  = 60
+    }
+    recruiter_invitations = {
+      artifact = "recruiterInvitations"
+      name     = "recruiter-invitations"
+      timeout  = 30
+    }
+  }
+}
+
+data "archive_file" "backend_api" {
+  for_each    = local.backend_api_lambdas
+  type        = "zip"
+
+  source_dir  = "${path.module}/../../../../backend/.lambda-dist/${each.value.artifact}"
+
+  output_path = "${path.module}/.artifacts/${each.key}.zip"
+}
+
+resource "aws_cloudwatch_log_group" "backend_api" {
+  for_each          = local.backend_api_lambdas
+  name              = "/aws/lambda/${var.project_name}-${var.environment}-${each.value.name}"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_iam_role" "backend_api" {
+  name               = "${var.project_name}-${var.environment}-backend-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = var.tags
+}
+
+data "aws_iam_policy_document" "backend_api" {
+  statement {
+    effect  = "Allow"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = [
+      for log_group in aws_cloudwatch_log_group.backend_api : "${log_group.arn}:*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup"]
+    resources = [aws_cognito_user_pool.main.arn]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [aws_secretsmanager_secret.xai_api.arn]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:Query"
+    ]
+    resources = [
+      aws_dynamodb_table.hiring_platform.arn,
+      "${aws_dynamodb_table.hiring_platform.arn}/index/*"
+    ]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.resumes.arn}/tenant/*"]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["lambda:InvokeFunction"]
+    resources = ["arn:aws:lambda:${var.aws_region}:${data.aws_caller_identity.current.account_id}:function:${var.project_name}-${var.environment}-application-analysis"]
+  }
+}
+
+resource "aws_iam_role_policy" "backend_api" {
+  role   = aws_iam_role.backend_api.id
+  policy = data.aws_iam_policy_document.backend_api.json
+}
+
+resource "aws_lambda_function" "backend_api" {
+  for_each         = local.backend_api_lambdas
+  function_name    = "${var.project_name}-${var.environment}-${each.value.name}"
+  role             = aws_iam_role.backend_api.arn
+  handler          = "index.main"
+  runtime          = "nodejs20.x"
+  filename         = data.archive_file.backend_api[each.key].output_path
+  source_code_hash = data.archive_file.backend_api[each.key].output_base64sha256
+  timeout          = each.value.timeout
+  memory_size      = 512
+
+  environment {
+    variables = {
+      COGNITO_REGION          = var.aws_region
+      COGNITO_USER_POOL_ID    = aws_cognito_user_pool.main.id
+      COGNITO_CLIENT_ID       = aws_cognito_user_pool_client.web.id
+      DYNAMODB_TABLE_NAME     = aws_dynamodb_table.hiring_platform.name
+      RESUME_BUCKET_NAME      = aws_s3_bucket.resumes.id
+      NOTIFICATION_WEBHOOK_URL = ""
+      XAI_SECRET_ARN           = aws_secretsmanager_secret.xai_api.arn
+      XAI_API_URL              = "https://api.x.ai/v1/chat/completions"
+      XAI_MODEL_ID             = "grok-3-mini"
+      APPLICATION_ANALYSIS_FUNCTION_NAME = "${var.project_name}-${var.environment}-application-analysis"
+    }
+  }
+
+  depends_on = [
+    aws_cloudwatch_log_group.backend_api,
+    aws_iam_role_policy.backend_api
+  ]
+  tags = var.tags
+}
+
+resource "aws_api_gateway_resource" "jobs" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
+  path_part   = "jobs"
+}
+
+resource "aws_api_gateway_resource" "jobs_id" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.jobs.id
+  path_part   = "{jobId}"
+}
+
+resource "aws_api_gateway_resource" "applications" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
+  path_part   = "applications"
+}
+
+resource "aws_api_gateway_resource" "careers" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
+  path_part   = "careers"
+}
+
+resource "aws_api_gateway_resource" "careers_tenant" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.careers.id
+  path_part   = "{tenantSlug}"
+}
+
+resource "aws_api_gateway_resource" "careers_job" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.careers_tenant.id
+  path_part   = "{slug}"
+}
+
+resource "aws_api_gateway_method" "public_job_get" {
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = aws_api_gateway_resource.careers_job.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "public_job_get" {
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = aws_api_gateway_resource.careers_job.id
+  http_method             = aws_api_gateway_method.public_job_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.backend_api["public_jobs"].invoke_arn
+}
+
+resource "aws_lambda_permission" "public_job_get" {
+  statement_id  = "AllowApiGatewayPublicCareerJob"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.backend_api["public_jobs"].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/GET/careers/*/*"
+}
+
+resource "aws_api_gateway_resource" "recruiter" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
+  path_part   = "recruiter"
+}
+
+resource "aws_api_gateway_resource" "admin" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_rest_api.main.root_resource_id
+  path_part   = "admin"
+}
+
+resource "aws_api_gateway_resource" "admin_recruiter_invitations" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.admin.id
+  path_part   = "recruiter-invitations"
+}
+
+resource "aws_api_gateway_resource" "recruiter_jobs" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter.id
+  path_part   = "jobs"
+}
+
+resource "aws_api_gateway_resource" "recruiter_jobs_id" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_jobs.id
+  path_part   = "{jobId}"
+}
+
+resource "aws_api_gateway_resource" "recruiter_jobs_id_applications" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_jobs_id.id
+  path_part   = "applications"
+}
+
+resource "aws_api_gateway_resource" "recruiter_applications" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter.id
+  path_part   = "applications"
+}
+
+resource "aws_api_gateway_resource" "recruiter_applications_id" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_applications.id
+  path_part   = "{applicationId}"
+}
+
+resource "aws_api_gateway_resource" "recruiter_applications_id_status" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_applications_id.id
+  path_part   = "status"
+}
+
+resource "aws_api_gateway_resource" "recruiter_applications_id_resume_url" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_applications_id.id
+  path_part   = "resume-url"
+}
+
+resource "aws_api_gateway_resource" "recruiter_candidates" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter.id
+  path_part   = "candidates"
+}
+
+resource "aws_api_gateway_resource" "recruiter_candidates_id" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter_candidates.id
+  path_part   = "{candidateId}"
+}
+
+resource "aws_api_gateway_resource" "recruiter_dashboard" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.recruiter.id
+  path_part   = "dashboard"
+}
+
+locals {
+  protected_api_routes = {
+    jobs_get = {
+      resource_id = aws_api_gateway_resource.jobs.id
+      method      = "GET"
+      lambda      = "jobs"
+      path        = "/jobs"
+    }
+    jobs_post = {
+      resource_id = aws_api_gateway_resource.jobs.id
+      method      = "POST"
+      lambda      = "jobs"
+      path        = "/jobs"
+    }
+    jobs_id_get = {
+      resource_id = aws_api_gateway_resource.jobs_id.id
+      method      = "GET"
+      lambda      = "jobs"
+      path        = "/jobs/{jobId}"
+    }
+    applications_get = {
+      resource_id = aws_api_gateway_resource.applications.id
+      method      = "GET"
+      lambda      = "applications"
+      path        = "/applications"
+    }
+    applications_post = {
+      resource_id = aws_api_gateway_resource.applications.id
+      method      = "POST"
+      lambda      = "applications"
+      path        = "/applications"
+    }
+    recruiter_jobs_get = {
+      resource_id = aws_api_gateway_resource.recruiter_jobs.id
+      method      = "GET"
+      lambda      = "recruiter"
+      path        = "/recruiter/jobs"
+    }
+    recruiter_job_applications_get = {
+      resource_id = aws_api_gateway_resource.recruiter_jobs_id_applications.id
+      method      = "GET"
+      lambda      = "recruiter"
+      path        = "/recruiter/jobs/{jobId}/applications"
+    }
+    recruiter_application_status_patch = {
+      resource_id = aws_api_gateway_resource.recruiter_applications_id_status.id
+      method      = "PATCH"
+      lambda      = "recruiter"
+      path        = "/recruiter/applications/{applicationId}/status"
+    }
+    recruiter_application_resume_url_get = {
+      resource_id = aws_api_gateway_resource.recruiter_applications_id_resume_url.id
+      method      = "GET"
+      lambda      = "recruiter"
+      path        = "/recruiter/applications/{applicationId}/resume-url"
+    }
+    recruiter_candidate_get = {
+      resource_id = aws_api_gateway_resource.recruiter_candidates_id.id
+      method      = "GET"
+      lambda      = "recruiter"
+      path        = "/recruiter/candidates/{candidateId}"
+    }
+    recruiter_dashboard_get = {
+      resource_id = aws_api_gateway_resource.recruiter_dashboard.id
+      method      = "GET"
+      lambda      = "dashboard"
+      path        = "/recruiter/dashboard"
+    }
+    admin_recruiter_invitation_post = {
+      resource_id = aws_api_gateway_resource.admin_recruiter_invitations.id
+      method      = "POST"
+      lambda      = "recruiter_invitations"
+      path        = "/admin/recruiter-invitations"
+    }
+  }
+}
+
+resource "aws_api_gateway_method" "protected" {
+  for_each      = local.protected_api_routes
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = each.value.resource_id
+  http_method   = each.value.method
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
+}
+
+resource "aws_api_gateway_integration" "protected" {
+  for_each                = local.protected_api_routes
+  rest_api_id             = aws_api_gateway_rest_api.main.id
+  resource_id             = each.value.resource_id
+  http_method             = aws_api_gateway_method.protected[each.key].http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.backend_api[each.value.lambda].invoke_arn
+}
+
+resource "aws_api_gateway_method" "protected_options" {
+  for_each      = local.protected_api_routes
+  rest_api_id   = aws_api_gateway_rest_api.main.id
+  resource_id   = each.value.resource_id
+  http_method   = "OPTIONS"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "protected_options" {
+  for_each          = local.protected_api_routes
+  rest_api_id       = aws_api_gateway_rest_api.main.id
+  resource_id       = each.value.resource_id
+  http_method       = aws_api_gateway_method.protected_options[each.key].http_method
+  type              = "MOCK"
+  request_templates = { "application/json" = "{\"statusCode\": 200}" }
+}
+
+resource "aws_api_gateway_method_response" "protected_options_200" {
+  for_each    = local.protected_api_routes
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = each.value.resource_id
+  http_method = aws_api_gateway_method.protected_options[each.key].http_method
+  status_code = "200"
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = true
+    "method.response.header.Access-Control-Allow-Headers" = true
+    "method.response.header.Access-Control-Allow-Methods" = true
+  }
+}
+
+resource "aws_api_gateway_integration_response" "protected_options_200" {
+  for_each    = local.protected_api_routes
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  resource_id = each.value.resource_id
+  http_method = aws_api_gateway_method.protected_options[each.key].http_method
+  status_code = aws_api_gateway_method_response.protected_options_200[each.key].status_code
+  response_parameters = {
+    "method.response.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
+    "method.response.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
+    "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
+  }
+}
+
+resource "aws_lambda_permission" "backend_api" {
+  for_each      = local.protected_api_routes
+  statement_id  = "AllowApiGateway${replace(title(each.key), "_", "")}"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.backend_api[each.value.lambda].function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/${each.value.method}${each.value.path}"
 }
 
 resource "aws_iam_role" "lambda_upload_resume" {
@@ -1156,7 +1719,8 @@ resource "aws_api_gateway_method" "upload_url_post" {
   rest_api_id   = aws_api_gateway_rest_api.main.id
   resource_id   = aws_api_gateway_resource.upload_url.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_method" "upload_url_options" {
@@ -1170,7 +1734,8 @@ resource "aws_api_gateway_method" "resume_analyze_post" {
   rest_api_id   = aws_api_gateway_rest_api.main.id
   resource_id   = aws_api_gateway_resource.resume_analyze.id
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "COGNITO_USER_POOLS"
+  authorizer_id = aws_api_gateway_authorizer.cognito.id
 }
 
 resource "aws_api_gateway_method" "resume_analyze_options" {
@@ -1279,7 +1844,7 @@ resource "aws_api_gateway_gateway_response" "default_4xx" {
   response_parameters = {
     "gatewayresponse.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
-    "gatewayresponse.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
 }
 
@@ -1290,7 +1855,7 @@ resource "aws_api_gateway_gateway_response" "default_5xx" {
   response_parameters = {
     "gatewayresponse.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
-    "gatewayresponse.header.Access-Control-Allow-Methods" = "'POST,OPTIONS'"
+    "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
 }
 
@@ -1334,7 +1899,11 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_integration_response.resume_analyze_options_200.id,
       aws_api_gateway_gateway_response.default_4xx.id,
       aws_api_gateway_gateway_response.default_5xx.id,
-      aws_api_gateway_authorizer.cognito.id
+      aws_api_gateway_authorizer.cognito.id,
+      aws_api_gateway_integration.public_job_get.id,
+      [for integration in values(aws_api_gateway_integration.protected) : integration.id],
+      [for integration in values(aws_api_gateway_integration.protected_options) : integration.id],
+      [for response in values(aws_api_gateway_integration_response.protected_options_200) : response.id]
     ]))
   }
 
@@ -1351,6 +1920,10 @@ resource "aws_api_gateway_deployment" "main" {
     aws_api_gateway_integration_response.upload_url_options_200,
     aws_api_gateway_method_response.resume_analyze_options_200,
     aws_api_gateway_integration_response.resume_analyze_options_200,
+    aws_api_gateway_integration.protected,
+    aws_api_gateway_integration.public_job_get,
+    aws_api_gateway_integration.protected_options,
+    aws_api_gateway_integration_response.protected_options_200,
     aws_api_gateway_gateway_response.default_4xx,
     aws_api_gateway_gateway_response.default_5xx
   ]

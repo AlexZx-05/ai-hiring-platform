@@ -8,11 +8,13 @@ import {
   Briefcase,
   CheckCircle2,
   FileText,
+  Info,
   Loader2,
   MapPin,
+  ShieldCheck,
   Send,
+  UploadCloud,
 } from "lucide-react";
-import { analyzeResume, getResumeParseStatus } from "@/services/candidate";
 import { getJob, createApplication, type Job } from "@/services/jobs";
 import { requestResumeUploadUrl, uploadResumeToS3 } from "@/services/upload";
 
@@ -31,6 +33,7 @@ export default function JobDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params.id) return;
@@ -61,6 +64,7 @@ export default function JobDetailPage() {
   const submitApplication = async () => {
     setError(null);
     setSuccess(null);
+    setInfo(null);
 
     if (!job) {
       setError("Job details are still loading.");
@@ -96,37 +100,24 @@ export default function JobDetailPage() {
       setResumeObjectKey(presign.objectKey);
       setParseStatus("PENDING");
 
+      if (!job.publicTenantSlug || !job.publicSlug) {
+        throw new Error("This job is missing its public application identity. Refresh after the jobs API is deployed.");
+      }
       const application = await createApplication({
         jobId: job.jobId,
+        publicTenantSlug: job.publicTenantSlug,
+        publicSlug: job.publicSlug,
         resumeId: presign.resumeId,
         resumeObjectKey: presign.objectKey,
         coverNote,
       });
 
-      for (let attempt = 0; attempt < 10; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2500));
-        const status = await getResumeParseStatus(presign.resumeId);
-        setParseStatus(status.parseStatus);
-        if (status.parseStatus === "SUCCEEDED") {
-          await analyzeResume({
-            resumeId: presign.resumeId,
-            jobRequirements: [
-              job.description,
-              ...job.requirements,
-              `Required skills: ${job.skills.join(", ")}`,
-            ].join("\n"),
-            mode: "analyze",
-          });
-          break;
-        }
-        if (status.parseStatus === "FAILED") {
-          break;
-        }
-      }
-
       setSuccess(`Application submitted. Tracking ID: ${application.applicationId}`);
+      setInfo("Resume uploaded. AI parsing and ranking will continue in the background.");
       setFile(null);
       setCoverNote("");
+
+      setInfo("Application submitted. Resume parsing and job-specific AI screening continue securely in the background. Check My Applications for updates.");
     } catch (err) {
       const message =
         (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -188,7 +179,7 @@ export default function JobDetailPage() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-5xl gap-4 px-5 py-6 lg:grid-cols-[1fr_360px]">
+      <section className="mx-auto grid max-w-6xl gap-5 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         {!job ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
             {error ?? "Job not found."}
@@ -201,11 +192,11 @@ export default function JobDetailPage() {
                   This is a sample job. Deploy the jobs API before accepting applications.
                 </div>
               ) : null}
-              <article className="rounded-xl border border-gray-100 bg-white p-5">
+              <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-900">Role Overview</h2>
                 <p className="mt-3 text-sm leading-6 text-gray-600">{job.description}</p>
               </article>
-              <article className="rounded-xl border border-gray-100 bg-white p-5">
+              <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-900">Requirements</h2>
                 <ul className="mt-3 space-y-2">
                   {job.requirements.map((item) => (
@@ -216,7 +207,7 @@ export default function JobDetailPage() {
                   ))}
                 </ul>
               </article>
-              <article className="rounded-xl border border-gray-100 bg-white p-5">
+              <article className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <h2 className="text-sm font-semibold text-gray-900">Skills</h2>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {job.skills.map((skill) => (
@@ -228,10 +219,17 @@ export default function JobDetailPage() {
               </article>
             </div>
 
-            <aside className="rounded-xl border border-gray-100 bg-white p-5">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-blue-700" />
-                <h2 className="text-sm font-semibold text-gray-900">Apply for this role</h2>
+            <aside className="sticky top-5 h-fit rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                  <UploadCloud className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-900">Upload your resume</h2>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    Submit a PDF resume for AI matching against this job description.
+                  </p>
+                </div>
               </div>
 
               {error ? (
@@ -244,6 +242,12 @@ export default function JobDetailPage() {
                   {success}
                 </div>
               ) : null}
+              {info ? (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  <Info className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>{info}</span>
+                </div>
+              ) : null}
 
               <label className="mt-5 block text-xs font-semibold text-gray-700">
                 Resume PDF
@@ -252,9 +256,16 @@ export default function JobDetailPage() {
                   accept=".pdf,application/pdf"
                   disabled={submitting}
                   onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-                  className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-1.5 file:text-xs file:font-medium"
+                  className="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-blue-700"
                 />
               </label>
+              {file ? (
+                <div className="mt-3 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                  <FileText className="h-3.5 w-3.5 flex-none text-gray-500" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  <span className="font-semibold">{Math.ceil(file.size / 1024)} KB</span>
+                </div>
+              ) : null}
 
               <label className="mt-4 block text-xs font-semibold text-gray-700">
                 Cover Note
@@ -268,10 +279,16 @@ export default function JobDetailPage() {
                 />
               </label>
 
-              <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">
-                Parse status: <span className="font-semibold text-gray-900">{parseStatus}</span>
-                {resumeId ? <div className="mt-1">Resume ID: {resumeId}</div> : null}
-                {resumeObjectKey ? <div className="mt-1 truncate">S3: {resumeObjectKey}</div> : null}
+              <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-600">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 font-semibold text-gray-900">
+                    <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                    Screening status
+                  </span>
+                  <span className="rounded-md bg-white px-2 py-1 font-semibold text-gray-700">{parseStatus}</span>
+                </div>
+                {resumeId ? <div className="mt-2 break-all">Resume ID: {resumeId}</div> : null}
+                {resumeObjectKey ? <div className="mt-1 truncate">Storage key: {resumeObjectKey}</div> : null}
               </div>
 
               <button

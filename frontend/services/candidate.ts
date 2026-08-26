@@ -17,6 +17,8 @@ export type AnalyzeResumeResponse = {
   missingSkills: string[];
   confidence: number;
   summary: string;
+  providerStatus?: "LIVE" | "FALLBACK";
+  providerMessage?: string;
 };
 
 export async function analyzeResume(

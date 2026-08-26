@@ -1,5 +1,11 @@
 import { api } from "./api";
 import type { Application, Job } from "./jobs";
+import {
+  demoJobs,
+  getDemoCandidateRecords,
+  getDemoRecruiterApplications,
+} from "./demo-data";
+import { getDemoSession } from "./auth";
 
 export type RecruiterApplication = Application & {
   candidateId: string;
@@ -33,6 +39,9 @@ export type CandidateRecord = Record<string, unknown> & {
 };
 
 export async function listRecruiterJobs(): Promise<Job[]> {
+  if (getDemoSession()) {
+    return demoJobs;
+  }
   const response = await api.get<{ jobs: Job[] }>("/recruiter/jobs");
   return response.data.jobs;
 }
@@ -45,6 +54,9 @@ export async function createRecruiterJob(payload: CreateJobInput): Promise<Job> 
 export async function listJobApplications(
   jobId: string
 ): Promise<RecruiterApplication[]> {
+  if (getDemoSession()) {
+    return getDemoRecruiterApplications(jobId);
+  }
   const response = await api.get<{ applications: RecruiterApplication[] }>(
     `/recruiter/jobs/${jobId}/applications`
   );
@@ -64,9 +76,38 @@ export async function updateApplicationStatus(payload: {
   return response.data.application;
 }
 
+export type ResumeDownloadResponse = {
+  applicationId: string;
+  candidateId: string;
+  resumeId: string;
+  downloadUrl: string;
+  expiresIn: number;
+};
+
+export async function getResumeDownloadUrl(payload: {
+  applicationId: string;
+  candidateId: string;
+}): Promise<ResumeDownloadResponse> {
+  const response = await api.get<ResumeDownloadResponse>(
+    `/recruiter/applications/${payload.applicationId}/resume-url`,
+    {
+      params: {
+        candidateId: payload.candidateId,
+      },
+    }
+  );
+  return response.data;
+}
+
 export async function getRecruiterCandidate(
   candidateId: string
 ): Promise<{ candidateId: string; records: CandidateRecord[] }> {
+  if (getDemoSession()) {
+    return {
+      candidateId,
+      records: getDemoCandidateRecords(candidateId),
+    };
+  }
   const response = await api.get<{ candidateId: string; records: CandidateRecord[] }>(
     `/recruiter/candidates/${candidateId}`
   );

@@ -5,8 +5,8 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const protectedRoutes     = ["/dashboard", "/upload", "/candidates", "/jobs", "/applications", "/recruiter", "/analytics", "/rankings"];
-  const recruiterOnlyRoutes = ["/recruiter", "/analytics", "/rankings"];
-  const candidateOnlyRoutes = ["/upload", "/candidates", "/jobs", "/applications"];
+  const recruiterOnlyRoutes = ["/recruiter", "/candidates", "/analytics", "/rankings"];
+  const candidateOnlyRoutes = ["/upload", "/jobs", "/applications"];
 
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
 

@@ -43,9 +43,13 @@ function cleanList(value: unknown): string[] {
     .slice(0, 25);
 }
 
+function slugify(value: string): string {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 64) || "job";
+}
+
 function validateJob(payload: CreateJobRequest): Omit<
   JobRecord,
-  "PK" | "SK" | "entityType" | "tenantId" | "jobId" | "postedBy" | "createdAt" | "updatedAt" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK"
+  "PK" | "SK" | "entityType" | "tenantId" | "jobId" | "postedBy" | "createdAt" | "updatedAt" | "GSI1PK" | "GSI1SK" | "GSI2PK" | "GSI2SK" | "GSI3PK" | "GSI3SK" | "publicTenantSlug" | "publicSlug"
 > {
   const title = payload.title?.trim() ?? "";
   const department = payload.department?.trim() ?? "";
@@ -140,6 +144,8 @@ async function createJob(
   const tableName = requireTableName();
   const jobId = randomUUID();
   const now = new Date().toISOString();
+  const publicTenantSlug = slugify(auth.tenantId);
+  const publicSlug = `${slugify(validJob.title)}-${jobId.slice(0, 6)}`;
   const item: JobRecord = {
     PK: jobPk(auth.tenantId, jobId),
     SK: "PROFILE",
@@ -147,6 +153,8 @@ async function createJob(
     tenantId: auth.tenantId,
     jobId,
     ...validJob,
+    publicTenantSlug,
+    publicSlug,
     postedBy: auth.sub,
     createdAt: now,
     updatedAt: now,
@@ -154,6 +162,8 @@ async function createJob(
     GSI1SK: `STATUS#${validJob.status}#CREATED#${now}#JOB#${jobId}`,
     GSI2PK: `TENANT#${auth.tenantId}#JOB_DEPARTMENT#${validJob.department.toLowerCase()}`,
     GSI2SK: `CREATED#${now}#JOB#${jobId}`,
+    GSI3PK: `PUBLIC#${publicTenantSlug}`,
+    GSI3SK: `SLUG#${publicSlug}`,
   };
 
   await dynamo.send(

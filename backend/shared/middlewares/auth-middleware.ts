@@ -20,16 +20,6 @@ function parseBearerToken(event: APIGatewayProxyEventV2): string | null {
 }
 
 function resolveRole(claims: Record<string, unknown>): AppRole {
-  const customRole = claims["custom:role"];
-  if (
-    typeof customRole === "string" &&
-    (customRole === "candidate" ||
-      customRole === "recruiter" ||
-      customRole === "admin")
-  ) {
-    return customRole as AppRole;
-  }
-
   const groups = claims["cognito:groups"];
   if (Array.isArray(groups)) {
     if (groups.includes("admin")) {
@@ -40,6 +30,7 @@ function resolveRole(claims: Record<string, unknown>): AppRole {
     }
   }
 
+  // Browser-controlled custom attributes must never grant privileged access.
   return "candidate";
 }
 
@@ -51,14 +42,17 @@ export async function verifyAccessToken(
     throw new Error("Missing bearer token");
   }
 
-  const { payload } = await jwtVerify(token, jwks, {
-    issuer,
-    audience: CLIENT_ID,
-  });
+  const { payload } = await jwtVerify(token, jwks, { issuer });
 
   const tokenUse = payload.token_use;
   if (tokenUse !== "access" && tokenUse !== "id") {
     throw new Error("Invalid token_use");
+  }
+  if (tokenUse === "id" && payload.aud !== CLIENT_ID) {
+    throw new Error("Invalid token audience");
+  }
+  if (tokenUse === "access" && payload.client_id !== CLIENT_ID) {
+    throw new Error("Invalid token client");
   }
 
   const groups = Array.isArray(payload["cognito:groups"])
@@ -66,7 +60,8 @@ export async function verifyAccessToken(
     : [];
   const tenantIdClaim = payload["custom:tenantId"];
   const tenantId = typeof tenantIdClaim === "string" ? tenantIdClaim.trim() : "";
-  if (!tenantId) {
+  const role = resolveRole(payload as Record<string, unknown>);
+  if (!tenantId && role !== "candidate") {
     throw new Error("Missing tenantId claim");
   }
 
@@ -78,8 +73,9 @@ export async function verifyAccessToken(
   return {
     sub,
     email: payload.email ? String(payload.email) : undefined,
-    role: resolveRole(payload as Record<string, unknown>),
-    tenantId,
+    role,
+    // Candidates are intentionally isolated from recruiter tenant management.
+    tenantId: tenantId || "public",
     groups,
     tokenUse: String(tokenUse),
   };

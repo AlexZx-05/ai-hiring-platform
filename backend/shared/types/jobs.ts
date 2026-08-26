@@ -6,6 +6,7 @@ export type JobRecord = {
   entityType: "JOB";
   tenantId: string;
   jobId: string;
+  jobTenantId?: string;
   title: string;
   department: string;
   location: string;
@@ -17,6 +18,8 @@ export type JobRecord = {
   requirements: string[];
   skills: string[];
   status: JobStatus;
+  publicTenantSlug: string;
+  publicSlug: string;
   postedBy: string;
   createdAt: string;
   updatedAt: string;
@@ -24,13 +27,20 @@ export type JobRecord = {
   GSI1SK: string;
   GSI2PK: string;
   GSI2SK: string;
+  GSI3PK: string;
+  GSI3SK: string;
 };
 
 export type ApplicationStatus =
-  | "SUBMITTED"
+  | "APPLIED"
   | "PARSING"
+  | "AI_REVIEWED"
   | "UNDER_REVIEW"
   | "SHORTLISTED"
+  | "INTERVIEW_RECOMMENDED"
+  | "INTERVIEW_SCHEDULED"
+  | "OFFER"
+  | "HIRED"
   | "REJECTED";
 
 export type ApplicationRecord = {
@@ -40,6 +50,7 @@ export type ApplicationRecord = {
   tenantId: string;
   applicationId: string;
   jobId: string;
+  jobTenantId?: string;
   candidateId: string;
   candidateEmail?: string;
   resumeId: string;
@@ -52,4 +63,6 @@ export type ApplicationRecord = {
   GSI1SK: string;
   GSI2PK: string;
   GSI2SK: string;
+  GSI3PK: string;
+  GSI3SK: string;
 };

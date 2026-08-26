@@ -21,7 +21,12 @@ import {
   UsersRound,
 } from "lucide-react";
 import { configureAmplifyAuth } from "@/lib/amplify";
-import { getUserRoleFromIdToken, persistAuthArtifacts } from "@/services/auth";
+import {
+  demoLoginEnabled,
+  getUserRoleFromIdToken,
+  persistAuthArtifacts,
+  startDemoSession,
+} from "@/services/auth";
 
 type Role = "candidate" | "recruiter";
 type AccountRole = Role | "admin";
@@ -172,6 +177,11 @@ export default function SignInPage() {
     }
   };
 
+  const handleDemoLogin = (role: Role) => {
+    startDemoSession(role);
+    window.location.replace(role === "recruiter" ? "/dashboard" : "/jobs");
+  };
+
   return (
     <div className="flex min-h-screen">
       <section className="relative hidden w-[42%] flex-col overflow-hidden bg-[#0f1c2e] p-10 lg:flex">
@@ -245,6 +255,31 @@ export default function SignInPage() {
               </button>
             ))}
           </div>
+
+          {demoLoginEnabled ? (
+            <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <p className="text-xs font-semibold text-blue-950">Explore with sample data</p>
+              <p className="mt-1 text-[11px] leading-4 text-blue-800">
+                Development-only access. No Cognito account or password is required.
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin("candidate")}
+                  className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                >
+                  Demo candidate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDemoLogin("recruiter")}
+                  className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+                >
+                  Demo recruiter
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {errors.general && (
             <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">

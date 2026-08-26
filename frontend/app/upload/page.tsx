@@ -7,6 +7,7 @@ import {
   getResumeParseStatus,
   type AnalyzeResumeResponse,
 } from "@/services/candidate";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = [
@@ -141,8 +142,11 @@ export default function UploadPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#dbeafe_0%,_#eef2ff_35%,_#f8fafc_70%)] px-4 py-10 sm:px-6">
-      <section className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_50px_rgba(15,23,42,0.08)]">
+    <WorkspaceShell
+      title="Resume AI"
+      subtitle="Upload a resume and use AI-assisted screening insights before applying."
+    >
+      <section className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 text-white sm:px-8">
           <h1 className="text-3xl font-bold tracking-tight">Resume Intelligence</h1>
           <p className="mt-2 text-sm text-slate-200">
@@ -275,6 +279,6 @@ export default function UploadPage() {
           ) : null}
         </div>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }

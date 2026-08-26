@@ -18,6 +18,32 @@ const logoutRedirectUri =
   process.env.NEXT_PUBLIC_COGNITO_LOGOUT_REDIRECT_URI ??
   "http://localhost:3000/login";
 const cognitoScopes = "openid email phone aws.cognito.signin.user.admin";
+const DEMO_SESSION_KEY = "hireai_demo_session";
+
+export type DemoRole = "candidate" | "recruiter";
+
+export type DemoSession = {
+  role: DemoRole;
+  name: string;
+  email: string;
+};
+
+const demoProfiles: Record<DemoRole, DemoSession> = {
+  candidate: {
+    role: "candidate",
+    name: "Aarav Sharma",
+    email: "aarav.sharma@example.com",
+  },
+  recruiter: {
+    role: "recruiter",
+    name: "Priya Mehta",
+    email: "priya.mehta@talentflow.example",
+  },
+};
+
+export const demoLoginEnabled =
+  process.env.NODE_ENV !== "production" ||
+  process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === "true";
 
 export const cognitoAuthConfig = {
   authority: issuer,
@@ -46,7 +72,35 @@ export function clearAuthArtifacts(): void {
   if (typeof localStorage !== "undefined") {
     localStorage.removeItem("auth_access_token");
     localStorage.removeItem("auth_id_token");
+    localStorage.removeItem(DEMO_SESSION_KEY);
   }
+}
+
+export function startDemoSession(role: DemoRole): DemoSession {
+  const profile = demoProfiles[role];
+  if (typeof document !== "undefined") {
+    document.cookie = `auth_token=demo-${role}; Path=/; SameSite=Lax`;
+    document.cookie = `user_role=${role}; Path=/; SameSite=Lax`;
+  }
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify(profile));
+  }
+  return profile;
+}
+
+export function getDemoSession(): DemoSession | null {
+  if (typeof localStorage === "undefined") {
+    return null;
+  }
+  try {
+    const value = JSON.parse(localStorage.getItem(DEMO_SESSION_KEY) ?? "null") as DemoSession | null;
+    if (value?.role && value?.name && value?.email) {
+      return value;
+    }
+  } catch {
+    // A malformed browser value should behave like no session.
+  }
+  return null;
 }
 
 export function persistAuthArtifacts(
@@ -139,4 +193,8 @@ export function getUserRoleFromIdToken(idToken?: string): string {
     return "recruiter";
   }
   return "candidate";
+}
+
+export function getEffectiveUserRole(idToken?: string): string {
+  return getDemoSession()?.role ?? getUserRoleFromIdToken(idToken);
 }

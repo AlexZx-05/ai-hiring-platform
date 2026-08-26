@@ -10,7 +10,7 @@ export function json(
       "content-type": "application/json",
       "access-control-allow-origin": "*",
       "access-control-allow-headers": "content-type,authorization",
-      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-allow-methods": "GET,POST,PATCH,OPTIONS",
     },
     body: JSON.stringify(body),
   };

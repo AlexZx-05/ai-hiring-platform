@@ -8,32 +8,38 @@ import { useEffect, useState } from "react";
 export default function LoginPage() {
   const auth = useAuth();
   const router = useRouter();
-  const [notice, setNotice] = useState<string | null>(null);
 
-  const processingCallback =
-    typeof window !== "undefined" && hasAuthParams();
+  const [notice, setNotice] = useState<string | null>(null);
+  const [processingCallback, setProcessingCallback] = useState(false);
 
   useEffect(() => {
+    // Safe: only runs in the browser
+    setProcessingCallback(hasAuthParams());
+
     const storedNotice = localStorage.getItem("auth_notice");
-    if (storedNotice === "logged_out") {
-      setNotice("Signed out successfully.");
-      localStorage.removeItem("auth_notice");
+
+    switch (storedNotice) {
+      case "logged_out":
+        setNotice("Signed out successfully.");
+        break;
+      case "session_expired":
+        setNotice("Session expired. Please sign in again.");
+        break;
+      case "signup_verified":
+        setNotice("Email verified. Continue by signing in.");
+        break;
     }
-    if (storedNotice === "session_expired") {
-      setNotice("Session expired. Please sign in again.");
-      localStorage.removeItem("auth_notice");
-    }
-    if (storedNotice === "signup_verified") {
-      setNotice("Email verified. Continue by signing in.");
+
+    if (storedNotice) {
       localStorage.removeItem("auth_notice");
     }
   }, []);
 
   useEffect(() => {
     if (auth.isAuthenticated) {
-      window.location.replace("/dashboard");
+      router.replace("/dashboard");
     }
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, router]);
 
   if (auth.isLoading || processingCallback || auth.activeNavigator) {
     return (
@@ -60,12 +66,14 @@ export default function LoginPage() {
             <div className="h-8 w-8 rounded-md bg-blue-500" />
             <span className="text-2xl font-bold">HireAI</span>
           </div>
+
           <nav className="hidden gap-10 text-sm text-slate-300 md:flex">
             <a href="#features">Features</a>
             <a href="#how">How It Works</a>
             <a href="#pricing">Pricing</a>
             <a href="#about">About</a>
           </nav>
+
           <Link
             href="/signup"
             className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium transition hover:bg-blue-500"
@@ -82,6 +90,7 @@ export default function LoginPage() {
             <h1 className="max-w-xl text-5xl font-bold leading-tight lg:text-7xl">
               Hire Smarter with AI
             </h1>
+
             <p className="mt-8 max-w-xl text-lg text-slate-400">
               Streamline your hiring process with intelligent resume analysis,
               AI-powered candidate ranking, and automated interview tools.
@@ -100,7 +109,6 @@ export default function LoginPage() {
             )}
 
             <div className="mt-10 flex flex-wrap gap-4">
-              {/* ✅ CHANGED: now goes to /signin instead of auth.signinRedirect() */}
               <button
                 onClick={() => router.push("/signin")}
                 className="rounded-lg bg-blue-600 px-8 py-4 font-semibold transition hover:bg-blue-500"
@@ -117,7 +125,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Right */}
           <div className="relative">
             <div className="overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-cyan-500/30 via-slate-900 to-orange-500/20 p-1 shadow-2xl">
               <div className="flex h-[450px] items-center justify-center rounded-3xl bg-slate-950">
@@ -125,7 +132,10 @@ export default function LoginPage() {
                   <div className="bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-500 bg-clip-text text-8xl font-black text-transparent">
                     AI
                   </div>
-                  <p className="mt-4 text-slate-400">Intelligent Hiring Platform</p>
+
+                  <p className="mt-4 text-slate-400">
+                    Intelligent Hiring Platform
+                  </p>
                 </div>
               </div>
             </div>
@@ -134,28 +144,62 @@ export default function LoginPage() {
       </section>
 
       {/* Features */}
-      <section id="features" className="relative z-10 mx-auto mt-24 max-w-7xl px-6 pb-20">
+      <section
+        id="features"
+        className="relative z-10 mx-auto mt-24 max-w-7xl px-6 pb-20"
+      >
         <div className="text-center">
-          <h2 className="text-4xl font-bold">Powerful AI Features</h2>
-          <p className="mt-4 text-slate-400">Everything you need to hire the best talent efficiently</p>
+          <h2 className="text-4xl font-bold">
+            Powerful AI Features
+          </h2>
+
+          <p className="mt-4 text-slate-400">
+            Everything you need to hire the best talent efficiently
+          </p>
         </div>
+
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <FeatureCard title="Resume Parsing" description="Extract skills, education, projects and experience automatically." />
-          <FeatureCard title="AI Candidate Ranking" description="Generate AI-powered rankings and candidate matching scores." />
-          <FeatureCard title="ATS Pipeline" description="Track candidates from application to hiring using Kanban workflow." />
-          <FeatureCard title="Interview Questions" description="Generate personalized interview questions automatically." />
+          <FeatureCard
+            title="Resume Parsing"
+            description="Extract skills, education, projects and experience automatically."
+          />
+
+          <FeatureCard
+            title="AI Candidate Ranking"
+            description="Generate AI-powered rankings and candidate matching scores."
+          />
+
+          <FeatureCard
+            title="ATS Pipeline"
+            description="Track candidates from application to hiring using Kanban workflow."
+          />
+
+          <FeatureCard
+            title="Interview Questions"
+            description="Generate personalized interview questions automatically."
+          />
         </div>
       </section>
     </main>
   );
 }
 
-function FeatureCard({ title, description }: { title: string; description: string }) {
+function FeatureCard({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 transition hover:border-blue-500">
       <div className="mb-4 h-12 w-12 rounded-lg bg-blue-500/20" />
+
       <h3 className="text-xl font-semibold">{title}</h3>
-      <p className="mt-3 text-sm text-slate-400">{description}</p>
+
+      <p className="mt-3 text-sm text-slate-400">
+        {description}
+      </p>
     </div>
   );
 }

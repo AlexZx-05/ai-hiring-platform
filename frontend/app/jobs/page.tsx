@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { listJobs, type Job } from "@/services/jobs";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -58,28 +59,18 @@ export default function JobsPage() {
   }, [jobs, query]);
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700">
-              <Briefcase className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">Open Jobs</h1>
-              <p className="text-xs text-gray-500">Choose a role and submit your resume.</p>
-            </div>
-          </div>
-          <Link
-            href="/applications"
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            My Applications
-          </Link>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-5 py-6">
+    <WorkspaceShell
+      title="Open Jobs"
+      subtitle="Browse recruiter-posted roles and apply from the same candidate workspace."
+      actions={
+        <Link
+          href="/applications"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          My Applications
+        </Link>
+      }
+    >
         <div className="mb-4 grid gap-3 md:grid-cols-[1fr_220px]">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
@@ -172,7 +163,6 @@ export default function JobsPage() {
             ) : null}
           </div>
         )}
-      </section>
-    </main>
+    </WorkspaceShell>
   );
 }
