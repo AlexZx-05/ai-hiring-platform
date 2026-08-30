@@ -496,9 +496,9 @@ resource "aws_lambda_function" "parse_resume" {
 
   environment {
     variables = {
-      TABLE_NAME           = aws_dynamodb_table.hiring_platform.name
-      RESUME_BUCKET_NAME   = aws_s3_bucket.resumes.id
-      PROCESSING_QUEUE_URL = aws_sqs_queue.resume_processing.id
+      TABLE_NAME                         = aws_dynamodb_table.hiring_platform.name
+      RESUME_BUCKET_NAME                 = aws_s3_bucket.resumes.id
+      PROCESSING_QUEUE_URL               = aws_sqs_queue.resume_processing.id
       APPLICATION_ANALYSIS_FUNCTION_NAME = "${var.project_name}-${var.environment}-application-analysis"
     }
   }
@@ -598,13 +598,39 @@ resource "aws_cognito_user_pool_client" "web" {
     "ALLOW_USER_SRP_AUTH"
   ]
 
-  generate_secret                      = false
+  generate_secret = false
+
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email", "phone", "aws.cognito.signin.user.admin"]
-  supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["http://localhost:3000/login", "http://localhost:3001/login"]
-  logout_urls                          = ["http://localhost:3000/login", "http://localhost:3001/login"]
+
+  allowed_oauth_scopes = [
+    "openid",
+    "email",
+    "phone",
+    "aws.cognito.signin.user.admin"
+  ]
+
+  supported_identity_providers = ["COGNITO"]
+
+  callback_urls = [
+    "http://localhost:3000/login",
+    "http://localhost:3001/login"
+  ]
+
+  logout_urls = [
+    "http://localhost:3000/login",
+    "http://localhost:3001/login"
+  ]
+
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 30
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
 }
 
 resource "aws_iam_role" "lambda_analyze_resume" {
@@ -1078,10 +1104,10 @@ locals {
 }
 
 data "archive_file" "backend_api" {
-  for_each    = local.backend_api_lambdas
-  type        = "zip"
+  for_each = local.backend_api_lambdas
+  type     = "zip"
 
-  source_dir  = "${path.module}/../../../../backend/.lambda-dist/${each.value.artifact}"
+  source_dir = "${path.module}/../../../../backend/.lambda-dist/${each.value.artifact}"
 
   output_path = "${path.module}/.artifacts/${each.key}.zip"
 }
@@ -1109,8 +1135,8 @@ data "aws_iam_policy_document" "backend_api" {
   }
 
   statement {
-    effect = "Allow"
-    actions = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup"]
+    effect    = "Allow"
+    actions   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup"]
     resources = [aws_cognito_user_pool.main.arn]
   }
 
@@ -1165,15 +1191,15 @@ resource "aws_lambda_function" "backend_api" {
 
   environment {
     variables = {
-      COGNITO_REGION          = var.aws_region
-      COGNITO_USER_POOL_ID    = aws_cognito_user_pool.main.id
-      COGNITO_CLIENT_ID       = aws_cognito_user_pool_client.web.id
-      DYNAMODB_TABLE_NAME     = aws_dynamodb_table.hiring_platform.name
-      RESUME_BUCKET_NAME      = aws_s3_bucket.resumes.id
-      NOTIFICATION_WEBHOOK_URL = ""
-      XAI_SECRET_ARN           = aws_secretsmanager_secret.xai_api.arn
-      XAI_API_URL              = "https://api.x.ai/v1/chat/completions"
-      XAI_MODEL_ID             = "grok-3-mini"
+      COGNITO_REGION                     = var.aws_region
+      COGNITO_USER_POOL_ID               = aws_cognito_user_pool.main.id
+      COGNITO_CLIENT_ID                  = aws_cognito_user_pool_client.web.id
+      DYNAMODB_TABLE_NAME                = aws_dynamodb_table.hiring_platform.name
+      RESUME_BUCKET_NAME                 = aws_s3_bucket.resumes.id
+      NOTIFICATION_WEBHOOK_URL           = ""
+      XAI_SECRET_ARN                     = aws_secretsmanager_secret.xai_api.arn
+      XAI_API_URL                        = "https://api.x.ai/v1/chat/completions"
+      XAI_MODEL_ID                       = "grok-3-mini"
       APPLICATION_ANALYSIS_FUNCTION_NAME = "${var.project_name}-${var.environment}-application-analysis"
     }
   }
@@ -1846,6 +1872,10 @@ resource "aws_api_gateway_gateway_response" "default_4xx" {
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
+
+  response_templates = {
+    "application/json" = "{\"message\":$context.error.messageString}"
+  }
 }
 
 resource "aws_api_gateway_gateway_response" "default_5xx" {
@@ -1856,6 +1886,10 @@ resource "aws_api_gateway_gateway_response" "default_5xx" {
     "gatewayresponse.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
+  }
+
+  response_templates = {
+    "application/json" = "{\"message\":$context.error.messageString}"
   }
 }
 
