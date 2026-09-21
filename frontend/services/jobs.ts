@@ -6,6 +6,20 @@ import {
 } from "./demo-data";
 import { getDemoSession } from "./auth";
 
+export type ScreeningQuestion = {
+  id: string;
+  prompt: string;
+  required: boolean;
+  type: "TEXT" | "YES_NO" | "SELECT";
+  options?: string[];
+};
+
+export type ScreeningAnswer = {
+  questionId: string;
+  prompt?: string;
+  answer: string;
+};
+
 export type Job = {
   jobId: string;
   tenantId?: string;
@@ -21,6 +35,7 @@ export type Job = {
   description: string;
   requirements: string[];
   skills: string[];
+  screeningQuestions: ScreeningQuestion[];
   status: "OPEN" | "CLOSED" | "DRAFT";
   createdAt: string;
 };
@@ -31,6 +46,7 @@ export type Application = {
   resumeId: string;
   status: "APPLIED" | "PARSING" | "AI_REVIEWED" | "UNDER_REVIEW" | "SHORTLISTED" | "INTERVIEW_RECOMMENDED" | "INTERVIEW_SCHEDULED" | "OFFER" | "HIRED" | "REJECTED";
   coverNote?: string;
+  screeningAnswers?: ScreeningAnswer[];
   createdAt: string;
   updatedAt: string;
   processingError?: string;
@@ -43,6 +59,7 @@ export type CreateApplicationInput = {
   resumeId: string;
   resumeObjectKey: string;
   coverNote?: string;
+  screeningAnswers?: ScreeningAnswer[];
 };
 
 export async function listJobs(): Promise<{ jobs: Job[]; source: "api" | "demo" }> {

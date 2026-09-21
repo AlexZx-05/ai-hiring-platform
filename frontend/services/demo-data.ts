@@ -28,6 +28,20 @@ export const demoJobs: Job[] = [
       "Comfort working with REST APIs and auth flows",
     ],
     skills: ["React", "TypeScript", "Next.js", "Tailwind CSS", "REST APIs"],
+    screeningQuestions: [
+      {
+        id: "demo-fe-experience",
+        prompt: "How many years of production React experience do you have?",
+        required: true,
+        type: "TEXT",
+      },
+      {
+        id: "demo-fe-location",
+        prompt: "Are you able to work in our Bengaluru hybrid arrangement?",
+        required: true,
+        type: "YES_NO",
+      },
+    ],
     status: "OPEN",
     createdAt: daysAgo(10),
   },
@@ -48,6 +62,15 @@ export const demoJobs: Job[] = [
       "Ability to design clean APIs and data models",
     ],
     skills: ["Node.js", "TypeScript", "AWS", "DynamoDB", "API Design"],
+    screeningQuestions: [
+      {
+        id: "demo-be-aws",
+        prompt: "Which cloud platform have you used most recently?",
+        required: true,
+        type: "SELECT",
+        options: ["AWS", "Azure", "Google Cloud", "Other"],
+      },
+    ],
     status: "OPEN",
     createdAt: daysAgo(8),
   },
@@ -68,6 +91,7 @@ export const demoJobs: Job[] = [
       "Familiarity with prompts and evaluation logic",
     ],
     skills: ["Prompting", "Recruiting", "Quality Analysis", "Documentation"],
+    screeningQuestions: [],
     status: "OPEN",
     createdAt: daysAgo(6),
   },
@@ -82,6 +106,10 @@ export const demoApplications: Application[] = [
     coverNote: "Built recruiter dashboards and internal admin tools.",
     createdAt: daysAgo(4),
     updatedAt: daysAgo(2),
+    screeningAnswers: [
+      { questionId: "demo-fe-experience", answer: "Three years building React and TypeScript applications for internal product teams." },
+      { questionId: "demo-fe-location", answer: "Yes" },
+    ],
   },
   {
     applicationId: "app-demo-2",
@@ -91,6 +119,9 @@ export const demoApplications: Application[] = [
     coverNote: "Worked on Node.js APIs and DynamoDB-backed services.",
     createdAt: daysAgo(5),
     updatedAt: daysAgo(1),
+    screeningAnswers: [
+      { questionId: "demo-be-aws", answer: "AWS" },
+    ],
   },
   {
     applicationId: "app-demo-3",
@@ -119,6 +150,10 @@ export const demoRecruiterApplications: RecruiterApplication[] = [
     atsScore: 82,
     matchedSkills: ["React", "TypeScript", "Next.js"],
     missingSkills: ["REST APIs"],
+    screeningAnswers: [
+      { questionId: "demo-fe-experience", prompt: "How many years of production React experience do you have?", answer: "Three years building React and TypeScript applications for internal product teams." },
+      { questionId: "demo-fe-location", prompt: "Are you able to work in our Bengaluru hybrid arrangement?", answer: "Yes" },
+    ],
   },
   {
     applicationId: "app-demo-2",
@@ -135,6 +170,9 @@ export const demoRecruiterApplications: RecruiterApplication[] = [
     atsScore: 91,
     matchedSkills: ["Node.js", "TypeScript", "AWS", "DynamoDB"],
     missingSkills: ["API Design"],
+    screeningAnswers: [
+      { questionId: "demo-be-aws", prompt: "Which cloud platform have you used most recently?", answer: "AWS" },
+    ],
   },
   {
     applicationId: "app-demo-3",

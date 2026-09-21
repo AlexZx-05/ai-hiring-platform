@@ -31,7 +31,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (auth.isAuthenticated) {
-      window.location.replace("/dashboard");
+      const savedReturnTo = localStorage.getItem("post_login_return_to");
+      const destination = savedReturnTo?.startsWith("/") && !savedReturnTo.startsWith("//")
+        ? savedReturnTo
+        : "/dashboard";
+      localStorage.removeItem("post_login_return_to");
+      window.location.replace(destination);
     }
   }, [auth.isAuthenticated]);
 

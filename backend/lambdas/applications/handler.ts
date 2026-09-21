@@ -10,7 +10,11 @@ import { dynamo, requireTableName } from "../../shared/dynamodb.js";
 import { getHttpMethod, json, parseJsonBody } from "../../shared/http.js";
 import { withAuth } from "../../shared/middlewares/with-auth.js";
 import type { AuthContext } from "../../shared/types/auth.js";
-import type { ApplicationRecord } from "../../shared/types/jobs.js";
+import type {
+  ApplicationRecord,
+  ApplicationScreeningAnswer,
+  ScreeningQuestion,
+} from "../../shared/types/jobs.js";
 
 const REGION = process.env.AWS_REGION ?? "ap-south-1";
 const RESUME_BUCKET_NAME = process.env.RESUME_BUCKET_NAME;
@@ -25,6 +29,10 @@ type CreateApplicationRequest = {
   resumeId?: string;
   resumeObjectKey?: string;
   coverNote?: string;
+  screeningAnswers?: Array<{
+    questionId?: string;
+    answer?: string;
+  }>;
 };
 
 function candidatePk(tenantId: string, candidateId: string): string {
@@ -52,6 +60,59 @@ function validateApplication(payload: CreateApplicationRequest): Required<
     resumeObjectKey,
     coverNote: payload.coverNote?.trim() || undefined,
   };
+}
+
+function validateScreeningAnswers(
+  value: unknown,
+  questions: ScreeningQuestion[]
+): ApplicationScreeningAnswer[] {
+  if (!Array.isArray(value) && value !== undefined) {
+    throw new Error("screeningAnswers must be a list");
+  }
+
+  const answersByQuestionId = new Map<string, string>();
+  for (const item of value ?? []) {
+    if (!item || typeof item !== "object") {
+      throw new Error("A screening answer is invalid");
+    }
+    const input = item as Record<string, unknown>;
+    const questionId = String(input.questionId ?? "").trim();
+    const answer = String(input.answer ?? "").trim();
+    if (!questionId || answersByQuestionId.has(questionId)) {
+      throw new Error("Each screening question can be answered only once");
+    }
+    if (answer.length > 2_000) {
+      throw new Error("A screening answer cannot exceed 2,000 characters");
+    }
+    answersByQuestionId.set(questionId, answer);
+  }
+
+  const questionIds = new Set(questions.map((question) => question.id));
+  for (const questionId of answersByQuestionId.keys()) {
+    if (!questionIds.has(questionId)) {
+      throw new Error("An answer does not belong to this job's screening questions");
+    }
+  }
+
+  return questions.flatMap((question) => {
+    const answer = answersByQuestionId.get(question.id)?.trim() ?? "";
+    if (question.required && !answer) {
+      throw new Error(`Please answer: ${question.prompt}`);
+    }
+    if (!answer) {
+      return [];
+    }
+    if (question.type === "YES_NO" && !["yes", "no"].includes(answer.toLowerCase())) {
+      throw new Error(`Please answer Yes or No: ${question.prompt}`);
+    }
+    if (
+      question.type === "SELECT" &&
+      !question.options?.some((option) => option.toLowerCase() === answer.toLowerCase())
+    ) {
+      throw new Error(`Please choose one of the listed options: ${question.prompt}`);
+    }
+    return [{ questionId: question.id, prompt: question.prompt, answer }];
+  });
 }
 
 async function createApplication(
@@ -85,6 +146,18 @@ async function createApplication(
   const jobItem = job.Items?.[0];
   if (!jobItem || jobItem.entityType !== "JOB" || jobItem.status !== "OPEN" || jobItem.jobId !== payload.jobId) {
     return json(404, { message: "Open job not found" });
+  }
+
+  let screeningAnswers: ApplicationScreeningAnswer[];
+  try {
+    screeningAnswers = validateScreeningAnswers(
+      parseJsonBody<CreateApplicationRequest>(event).screeningAnswers,
+      Array.isArray(jobItem.screeningQuestions) ? jobItem.screeningQuestions as ScreeningQuestion[] : []
+    );
+  } catch (error) {
+    return json(400, {
+      message: error instanceof Error ? error.message : "Invalid screening answers",
+    });
   }
 
   const expectedPrefix = `tenant/${auth.tenantId}/candidate/${auth.sub}/resume/${payload.resumeId}-`;
@@ -138,6 +211,7 @@ async function createApplication(
     resumeId: payload.resumeId,
     resumeObjectKey: payload.resumeObjectKey,
     coverNote: payload.coverNote,
+    screeningAnswers,
     status: "PARSING",
     createdAt: now,
     updatedAt: now,

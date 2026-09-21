@@ -13,6 +13,7 @@ const handlers = {
   publicJobs: "lambdas/publicJobs/handler.ts",
   applicationAnalysis: "lambdas/applicationAnalysis/handler.ts",
   recruiterInvitations: "lambdas/recruiterInvitations/handler.ts",
+  postConfirmation: "lambdas/postConfirmation/handler.ts",
 };
 
 await rm(outputRoot, { recursive: true, force: true });

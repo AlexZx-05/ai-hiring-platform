@@ -3,10 +3,16 @@
     "[project]/app/_not-found/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
+    "[project]/app/admin/recruiters/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
     "[project]/app/applications/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
     "[project]/app/candidates/page": [
+      "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
+    ],
+    "[project]/app/careers/[tenant]/[slug]/page": [
       "static/media/caa3a2e1cccd8315-s.p.09~u27dqhyhd6.woff2"
     ],
     "[project]/app/dashboard/page": [

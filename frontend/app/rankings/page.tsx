@@ -3,7 +3,8 @@
 import Link from "next/link";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BarChart2, BriefcaseBusiness, Search, Sparkles, Trophy } from "lucide-react";
+import { BarChart2, BriefcaseBusiness, Search, Sparkles, Trophy } from "lucide-react";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import {
   listJobApplications,
   listRecruiterJobs,
@@ -107,31 +108,13 @@ export default function RankingsPage() {
   const scoredEntries = filteredEntries.filter((entry) => typeof entry.atsScore === "number");
 
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-6">
-      <section className="mx-auto max-w-7xl space-y-6">
+    <WorkspaceShell
+      title="Candidate leaderboard"
+      subtitle="Compare job-relevant evidence, AI match scores, and recruiter review state."
+    >
+      <section className="space-y-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <Link
-            href="/dashboard"
-            className="mb-5 flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to dashboard
-          </Link>
-
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
-                <BarChart2 className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-slate-900">Candidate Rankings</h1>
-                <p className="text-sm text-slate-500">
-                  Compare applicants by AI score when available, then recruiter review state.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="relative block md:col-span-2 xl:col-span-1">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Search
@@ -166,7 +149,6 @@ export default function RankingsPage() {
                 <option value="70">70% and above</option>
                 <option value="55">55% and above</option>
               </FilterSelect>
-            </div>
           </div>
         </div>
 
@@ -272,7 +254,7 @@ export default function RankingsPage() {
           )}
         </section>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }
 

@@ -2,26 +2,30 @@
 
 An AWS-based hiring workflow with a Next.js frontend, TypeScript Lambda APIs, API Gateway, Cognito, S3, SQS, Textract, DynamoDB, and Terraform.
 
-> **Project status:** implementation is in progress. The cloud stack has not been deployed from this workspace because AWS account access is still required.
+> **Project status:** the core API and UI are implemented in source, but the latest Terraform and Lambda bundles must still be applied to AWS and verified with real accounts.
 
 ## What is implemented
 
-- Terraform packages the TypeScript `jobs`, `applications`, `recruiter`, and `recruiterDashboard` Lambda bundles and defines the protected API routes.
+- Terraform packages TypeScript Lambdas for jobs, applications, recruiter actions, dashboard, public jobs, invitation, application analysis, and post-confirmation tenant setup.
+- API Gateway defines the jobs, applications, recruiter, dashboard, invitation, and public careers routes. The protected API role includes the Cognito `GetUser` permission required by access-token verification.
 - The recruiter resume URL route is checked before the generic applications route.
-- Resume upload and analysis endpoints use the Cognito API Gateway authorizer.
-- Application creation verifies the S3 object, candidate/tenant/resume metadata, parse success, and duplicate applications for the same candidate and job.
+- Self-service signup cannot grant a role or tenant. A Cognito post-confirmation trigger assigns each candidate a private tenant; recruiters are created only through the admin invitation route and Cognito recruiter group.
+- Public job identifiers, careers pages, and copy/LinkedIn/WhatsApp/email sharing links are present.
+- Application creation verifies the resume object, its metadata/ownership, its ID/key pairing, and duplicate applications. It creates a `PARSING` application; the parse worker then invokes job-specific analysis after parsing.
+- AI analysis is generated from the saved application and job description, and is stored under `APPLICATION#{applicationId} / JOB#{jobId}#ANALYSIS#{timestamp}`.
 - Application statuses include `APPLIED`, `PARSING`, `AI_REVIEWED`, `UNDER_REVIEW`, `SHORTLISTED`, `INTERVIEW_RECOMMENDED`, `INTERVIEW_SCHEDULED`, `OFFER`, `HIRED`, and `REJECTED`.
 - Recruiter status changes are transition-checked and write audit records.
-- Public signup no longer sends a recruiter/admin role or tenant ID from the browser. Privileged roles are resolved from Cognito groups.
+- Recruiter candidate profiles resolve the candidate's private tenant only after proving that candidate applied to one of the recruiter's jobs.
 
 ## Still required before calling the workflow complete
 
-- Admin invitation/approval API and UI for recruiter creation and tenant claims.
-- Public job slug records, unauthenticated careers endpoints/pages, and sharing buttons.
-- Move AI scoring into the asynchronous application pipeline and save analysis records by `applicationId` and `jobId`; current analysis is still resume-oriented.
-- Remove normal-use demo fallbacks once the deployed API is verified.
-- Complete dashboard filtering, interview recommendation view, audit-history UI, and candidate-side processing/error/interview feedback.
-- Deploy and run the end-to-end test with one recruiter and one candidate.
+- Apply the latest infrastructure. Until this is done, the deployed Lambda role may still lack `cognito-idp:GetUser`, which causes protected frontend requests to return `401` and appear as empty data.
+- Remove the legacy standalone `/resume/analyze` browser flow and its UI. It still accepts browser-supplied requirements; the application-analysis Lambda is the intended job-specific path.
+- Add a real malware-scan/completion record and gate application analysis on successful scanning. The current upload metadata has only a `PENDING_HOOK` placeholder.
+- Replace demo-mode fallbacks after the deployed routes have been verified.
+- Finish recruiter filtering/sorting, recommended-interview view, and audit-history display. Notes and pipeline changes exist, but these views need complete UX verification.
+- Finish candidate interview scheduling/offer messaging and a persistent candidate-facing resume-processing error view.
+- Add automated API/integration tests, then perform the required two-account end-to-end test: recruiter creates and shares a role; candidate signs up, uploads, applies; analysis completes; recruiter reviews and moves to interview; candidate sees the new status.
 
 ## Prerequisites
 
@@ -45,6 +49,8 @@ npm run dev
 ```
 
 The backend build creates `backend/.lambda-dist/*`. Terraform packages these artifacts, so rebuild the backend immediately before Terraform plan/apply.
+
+After a successful apply, sign out and sign in again. Existing tokens do not gain new Cognito attributes or group claims until they are refreshed.
 
 ## AWS deployment
 

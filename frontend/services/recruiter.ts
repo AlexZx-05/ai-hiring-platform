@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { Application, Job } from "./jobs";
+import type { Application, Job, ScreeningQuestion } from "./jobs";
 import {
   demoJobs,
   getDemoCandidateRecords,
@@ -16,6 +16,7 @@ export type RecruiterApplication = Application & {
   atsScore?: number;
   matchedSkills?: string[];
   missingSkills?: string[];
+  screeningAnswers?: Application["screeningAnswers"];
 };
 
 export type CreateJobInput = {
@@ -29,6 +30,7 @@ export type CreateJobInput = {
   description: string;
   requirements: string[];
   skills: string[];
+  screeningQuestions?: Array<Omit<ScreeningQuestion, "id">>;
   status?: Job["status"];
 };
 
@@ -37,6 +39,24 @@ export type CandidateRecord = Record<string, unknown> & {
   createdAt?: string;
   updatedAt?: string;
 };
+
+export type RecruiterInvitation = {
+  invitationId: string;
+  email: string;
+  tenantId: string;
+  role: "recruiter";
+  status: "SENT";
+  createdAt: string;
+};
+
+/** Admin-only: Cognito delivers the temporary-password invitation email. */
+export async function inviteRecruiter(email: string): Promise<RecruiterInvitation> {
+  const response = await api.post<{ invitation: RecruiterInvitation }>(
+    "/admin/recruiter-invitations",
+    { email }
+  );
+  return response.data.invitation;
+}
 
 export async function listRecruiterJobs(): Promise<Job[]> {
   if (getDemoSession()) {

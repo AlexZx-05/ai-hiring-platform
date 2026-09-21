@@ -572,6 +572,13 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
+  lambda_config {
+    post_confirmation = aws_lambda_function.post_confirmation.arn
+  }
+
+  # Cognito validates its right to invoke the trigger while creating the pool.
+  depends_on = [aws_lambda_permission.cognito_post_confirmation]
+
   schema {
     name                = "role"
     attribute_data_type = "String"
@@ -585,6 +592,69 @@ resource "aws_cognito_user_pool" "main" {
   }
 
   tags = var.tags
+}
+
+data "archive_file" "post_confirmation" {
+  type        = "zip"
+  source_dir  = "${path.module}/../../../../backend/.lambda-dist/postConfirmation"
+  output_path = "${path.module}/.artifacts/post-confirmation.zip"
+}
+
+resource "aws_cloudwatch_log_group" "post_confirmation" {
+  name              = "/aws/lambda/${var.project_name}-${var.environment}-post-confirmation"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_iam_role" "post_confirmation" {
+  name               = "${var.project_name}-${var.environment}-post-confirmation-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+  tags               = var.tags
+}
+
+data "aws_iam_policy_document" "post_confirmation" {
+  statement {
+    effect  = "Allow"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.post_confirmation.arn}:*"]
+  }
+
+  # The user pool is deliberately not referenced here to avoid a user-pool /
+  # trigger Lambda dependency cycle.
+  statement {
+    effect    = "Allow"
+    actions   = ["cognito-idp:AdminUpdateUserAttributes"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "post_confirmation" {
+  role   = aws_iam_role.post_confirmation.id
+  policy = data.aws_iam_policy_document.post_confirmation.json
+}
+
+resource "aws_lambda_function" "post_confirmation" {
+  function_name    = "${var.project_name}-${var.environment}-post-confirmation"
+  role             = aws_iam_role.post_confirmation.arn
+  handler          = "index.main"
+  runtime          = "nodejs20.x"
+  filename         = data.archive_file.post_confirmation.output_path
+  source_code_hash = data.archive_file.post_confirmation.output_base64sha256
+  timeout          = 15
+
+  depends_on = [
+    aws_cloudwatch_log_group.post_confirmation,
+    aws_iam_role_policy.post_confirmation,
+  ]
+
+  tags = var.tags
+}
+
+resource "aws_lambda_permission" "cognito_post_confirmation" {
+  statement_id  = "AllowCognitoPostConfirmation"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.post_confirmation.function_name
+  principal     = "cognito-idp.amazonaws.com"
 }
 
 
@@ -1136,7 +1206,13 @@ data "aws_iam_policy_document" "backend_api" {
 
   statement {
     effect    = "Allow"
-    actions   = ["cognito-idp:AdminCreateUser", "cognito-idp:AdminAddUserToGroup"]
+    actions   = [
+      "cognito-idp:AdminCreateUser",
+      "cognito-idp:AdminAddUserToGroup",
+      "cognito-idp:AdminGetUser",
+      "cognito-idp:AdminListGroupsForUser",
+      "cognito-idp:GetUser"
+    ]
     resources = [aws_cognito_user_pool.main.arn]
   }
 
@@ -1934,6 +2010,12 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_gateway_response.default_4xx.id,
       aws_api_gateway_gateway_response.default_5xx.id,
       aws_api_gateway_authorizer.cognito.id,
+      [for method in values(aws_api_gateway_method.protected) : {
+        id                   = method.id
+        authorization        = method.authorization
+        authorizer_id        = method.authorizer_id
+        authorization_scopes = method.authorization_scopes
+      }],
       aws_api_gateway_integration.public_job_get.id,
       [for integration in values(aws_api_gateway_integration.protected) : integration.id],
       [for integration in values(aws_api_gateway_integration.protected_options) : integration.id],

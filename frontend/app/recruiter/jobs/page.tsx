@@ -1,12 +1,14 @@
 "use client";
 
-import JobHeader from "@/components/recruiter/jobs/JobHeader";
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import JobStats from "@/components/recruiter/jobs/JobStats";
 import JobSearch from "@/components/recruiter/jobs/JobSearch";
 import JobFilters from "@/components/recruiter/jobs/JobFilters";
 import JobTable from "@/components/recruiter/jobs/JobTable";
 import LoadingJobs from "@/components/recruiter/jobs/LoadingJobs";
 import EmptyJobs from "@/components/recruiter/jobs/EmptyJobs";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import { useRecruiterJobs } from "@/hooks/useRecruiterJobs";
 import { useMemo, useState } from "react";
 
@@ -31,11 +33,20 @@ export default function RecruiterJobsPage() {
   }, [jobs, search, status]);
 
   return (
-    <main className="min-h-screen bg-gray-50">
-
-      <JobHeader />
-
-      <section className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+    <WorkspaceShell
+      title="Job postings"
+      subtitle="Create, publish, and manage your organization’s hiring pipeline."
+      actions={
+        <Link
+          href="/recruiter/jobs/create"
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+        >
+          <Plus className="h-4 w-4" />
+          Create job
+        </Link>
+      }
+    >
+      <section className="space-y-6">
 
         <JobStats jobs={jobs} />
 
@@ -67,7 +78,6 @@ export default function RecruiterJobsPage() {
           />
         )}
       </section>
-
-    </main>
+    </WorkspaceShell>
   );
 }

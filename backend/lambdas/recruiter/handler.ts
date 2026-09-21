@@ -382,12 +382,57 @@ async function getCandidateProfile(
   }
 
   const tableName = requireTableName();
+
+  // Candidates have private candidate tenants. Find an application in this
+  // recruiter's tenant first, then use its tenantId to read only that
+  // candidate's records. This prevents arbitrary cross-tenant profile reads.
+  const jobs = await dynamo.send(
+    new QueryCommand({
+      TableName: tableName,
+      IndexName: "GSI1",
+      KeyConditionExpression: "GSI1PK = :pk",
+      ExpressionAttributeValues: {
+        ":pk": tenantJobsPk(auth.tenantId),
+      },
+      Limit: 100,
+    })
+  );
+
+  let candidateTenantId: string | undefined;
+  for (const job of jobs.Items ?? []) {
+    const jobId = String(job.jobId ?? "").trim();
+    if (!jobId) continue;
+    const applications = await dynamo.send(
+      new QueryCommand({
+        TableName: tableName,
+        IndexName: "GSI1",
+        KeyConditionExpression: "GSI1PK = :pk",
+        FilterExpression: "candidateId = :candidateId AND entityType = :entityType",
+        ExpressionAttributeValues: {
+          ":pk": `TENANT#${auth.tenantId}#JOB#${jobId}`,
+          ":candidateId": candidateId,
+          ":entityType": "APPLICATION",
+        },
+        Limit: 1,
+      })
+    );
+    const application = applications.Items?.[0];
+    if (application?.tenantId) {
+      candidateTenantId = String(application.tenantId);
+      break;
+    }
+  }
+
+  if (!candidateTenantId) {
+    return json(404, { message: "Candidate not found in this tenant" });
+  }
+
   const response = await dynamo.send(
     new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: "PK = :pk",
       ExpressionAttributeValues: {
-        ":pk": candidatePk(auth.tenantId, candidateId),
+        ":pk": candidatePk(candidateTenantId, candidateId),
       },
       ScanIndexForward: false,
       Limit: 100,

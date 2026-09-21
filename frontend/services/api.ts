@@ -21,8 +21,12 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token =
+      // REST API Gateway validates ID tokens when no OAuth scope is attached
+      // to the route. The backend resolves tenant membership from Cognito if
+      // an older token does not include the custom tenant attribute.
       localStorage.getItem("auth_id_token") ??
       localStorage.getItem("auth_access_token");
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

@@ -42,6 +42,7 @@ export async function main(event: APIGatewayProxyEventV2): Promise<APIGatewayPro
       description: job.description,
       requirements: job.requirements,
       skills: job.skills,
+      screeningQuestions: job.screeningQuestions ?? [],
       status: job.status,
       createdAt: job.createdAt,
     },

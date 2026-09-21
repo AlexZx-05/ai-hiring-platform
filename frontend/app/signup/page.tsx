@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { confirmSignUp, resendSignUpCode, signUp } from "aws-amplify/auth";
 import {
   BarChart3,
@@ -18,6 +18,7 @@ import {
 import { getCognitoAuthorizeUrl } from "@/services/auth";
 
 export default function SignupPage() {
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const [step, setStep] = useState<"signup" | "verify">("signup");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,11 @@ export default function SignupPage() {
     return "Self-service signup creates a candidate account. Recruiter access is issued by an organization administrator through an invitation.";
   }, [form.role]);
 
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("returnTo");
+    setReturnTo(value?.startsWith("/") && !value.startsWith("//") ? value : null);
+  }, []);
+
   const onSignup = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -47,6 +53,9 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      if (returnTo) {
+        localStorage.setItem("post_login_return_to", returnTo);
+      }
       if (form.password !== form.confirmPassword) {
         throw new Error("Password and confirm password do not match");
       }

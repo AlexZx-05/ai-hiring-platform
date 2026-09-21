@@ -12,6 +12,7 @@ import {
   RefreshCcw,
   ExternalLink,
   Copy,
+  Mail,
   Sparkles,
   UserCheck,
   XCircle,
@@ -24,6 +25,7 @@ import {
   type RecruiterApplication,
 } from "@/services/recruiter";
 import { compareApplications, getMatchStrength, getScreeningLabel } from "@/lib/screening";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
 const statusStyle: Record<RecruiterApplication["status"], string> = {
   APPLIED: "bg-blue-50 text-blue-700",
@@ -37,6 +39,34 @@ const statusStyle: Record<RecruiterApplication["status"], string> = {
   HIRED: "bg-emerald-100 text-emerald-800",
   REJECTED: "bg-rose-50 text-rose-700",
 };
+
+const forwardActions: Partial<Record<RecruiterApplication["status"], {
+  label: string;
+  status: RecruiterApplication["status"];
+  icon: typeof FileText;
+  className: string;
+}>> = {
+  AI_REVIEWED: { label: "Start review", status: "UNDER_REVIEW", icon: FileText, className: "bg-indigo-50 text-indigo-700 hover:bg-indigo-100" },
+  UNDER_REVIEW: { label: "Shortlist", status: "SHORTLISTED", icon: CheckCircle2, className: "bg-green-50 text-green-700 hover:bg-green-100" },
+  SHORTLISTED: { label: "Recommend interview", status: "INTERVIEW_RECOMMENDED", icon: UserCheck, className: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  INTERVIEW_RECOMMENDED: { label: "Mark interview scheduled", status: "INTERVIEW_SCHEDULED", icon: UserCheck, className: "bg-violet-50 text-violet-700 hover:bg-violet-100" },
+  INTERVIEW_SCHEDULED: { label: "Record offer", status: "OFFER", icon: CheckCircle2, className: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
+  OFFER: { label: "Mark hired", status: "HIRED", icon: CheckCircle2, className: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" },
+};
+
+function candidateEmailUrl(application: RecruiterApplication, jobTitle?: string): string | null {
+  if (!application.candidateEmail) return null;
+
+  const candidateName = application.candidateEmail.split("@")[0].replace(/[._-]/g, " ");
+  const role = jobTitle ?? "the role";
+  const declined = application.status === "REJECTED";
+  const subject = declined ? `Update on your ${role} application` : `Next steps for your ${role} application`;
+  const body = declined
+    ? `Hello ${candidateName},\n\nThank you for the time and effort you invested in applying for ${role}. After careful consideration, we will not be progressing your application at this time.\n\nWe appreciate your interest and wish you every success in your search.\n\nBest regards,\nRecruiting Team`
+    : `Hello ${candidateName},\n\nThank you for your interest in ${role}. We reviewed your application and would like to discuss the next step with you.\n\nPlease reply with your availability for a brief conversation and any questions you may have.\n\nBest regards,\nRecruiting Team`;
+
+  return `mailto:${encodeURIComponent(application.candidateEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return (
@@ -150,9 +180,11 @@ export default function RecruiterJobApplicantsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-5 py-5">
+    <WorkspaceShell
+      title={job?.title ?? "Applicant review"}
+      subtitle="Review evidence, compare candidates, and make accountable hiring decisions."
+    >
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
           <Link
             href="/recruiter/jobs"
             className="mb-4 flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900"
@@ -203,10 +235,9 @@ export default function RecruiterJobApplicantsPage() {
               </div>
             </div>
           ) : null}
-        </div>
       </section>
 
-      <section className="mx-auto max-w-7xl space-y-6 px-5 py-6">
+      <section className="mt-6 space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Total applicants" value={String(ranked.length)} icon={UserCheck} />
           <MetricCard label="Shortlisted" value={String(shortlistCount)} icon={CheckCircle2} />
@@ -287,6 +318,10 @@ export default function RecruiterJobApplicantsPage() {
                       />
                     </div>
 
+                    {application.screeningAnswers?.length ? (
+                      <ScreeningAnswers answers={application.screeningAnswers} />
+                    ) : null}
+
                     <label className="mt-4 block text-xs font-semibold text-slate-700">
                       Recruiter note
                       <textarea
@@ -312,27 +347,36 @@ export default function RecruiterJobApplicantsPage() {
                       className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                       onClick={() => void onViewResume(application)}
                     />
-                    <ActionButton
-                      label={updatingId === application.applicationId ? "Saving..." : "Mark review"}
-                      icon={FileText}
-                      disabled={updatingId === application.applicationId}
-                      className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                      onClick={() => void onStatus(application, "UNDER_REVIEW")}
-                    />
-                    <ActionButton
-                      label={updatingId === application.applicationId ? "Saving..." : "Shortlist"}
-                      icon={CheckCircle2}
-                      disabled={updatingId === application.applicationId}
-                      className="bg-green-50 text-green-700 hover:bg-green-100"
-                      onClick={() => void onStatus(application, "SHORTLISTED")}
-                    />
-                    <ActionButton
-                      label={updatingId === application.applicationId ? "Saving..." : "Reject"}
-                      icon={XCircle}
-                      disabled={updatingId === application.applicationId}
-                      className="bg-rose-50 text-rose-700 hover:bg-rose-100"
-                      onClick={() => void onStatus(application, "REJECTED")}
-                    />
+                    {(() => {
+                      const action = forwardActions[application.status];
+                      return action ? (
+                        <ActionButton
+                          label={updatingId === application.applicationId ? "Saving..." : action.label}
+                          icon={action.icon}
+                          disabled={updatingId === application.applicationId}
+                          className={action.className}
+                          onClick={() => void onStatus(application, action.status)}
+                        />
+                      ) : null;
+                    })()}
+                    {application.status !== "REJECTED" && application.status !== "HIRED" ? (
+                      <ActionButton
+                        label={updatingId === application.applicationId ? "Saving..." : "Reject"}
+                        icon={XCircle}
+                        disabled={updatingId === application.applicationId}
+                        className="bg-rose-50 text-rose-700 hover:bg-rose-100"
+                        onClick={() => void onStatus(application, "REJECTED")}
+                      />
+                    ) : null}
+                    {candidateEmailUrl(application, job?.title) ? (
+                      <a
+                        href={candidateEmailUrl(application, job?.title) ?? undefined}
+                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Mail className="h-3.5 w-3.5" />
+                        {application.status === "REJECTED" ? "Prepare decline email" : "Prepare candidate email"}
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </article>
@@ -348,7 +392,7 @@ export default function RecruiterJobApplicantsPage() {
           </div>
         )}
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }
 
@@ -416,6 +460,26 @@ function SkillBlock({
         )}
       </div>
     </div>
+  );
+}
+
+function ScreeningAnswers({
+  answers,
+}: {
+  answers: NonNullable<RecruiterApplication["screeningAnswers"]>;
+}) {
+  return (
+    <section className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-900">Candidate screening responses</h3>
+      <dl className="mt-3 space-y-3">
+        {answers.map((item) => (
+          <div key={item.questionId}>
+            <dt className="text-xs font-medium text-slate-700">{item.prompt ?? "Screening question"}</dt>
+            <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-900">{item.answer}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   BriefcaseBusiness,
   Search,
   Sparkles,
   UserCheck,
   Users,
 } from "lucide-react";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import {
   listJobApplications,
   listRecruiterJobs,
@@ -127,45 +127,23 @@ export default function CandidatesPage() {
   }, [entries]);
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-5 py-5">
-          <Link
-            href="/dashboard"
-            className="mb-4 flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to dashboard
-          </Link>
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-semibold text-slate-900">Candidate Directory</h1>
-                  <p className="text-sm text-slate-500">
-                    Review every applicant across recruiter jobs from one screen.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <label className="relative block w-full lg:w-80">
-              <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by candidate, job, or skill"
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl space-y-6 px-5 py-6">
+    <WorkspaceShell
+      title="Candidate directory"
+      subtitle="Review every applicant across your organization’s jobs from one workspace."
+      actions={
+        <label className="relative block w-56 sm:w-80">
+          <span className="sr-only">Search candidates</span>
+          <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Candidate, job, or skill"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+        </label>
+      }
+    >
+      <section className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <SummaryCard label="Unique candidates" value={summary.totalCandidates} icon={Users} />
           <SummaryCard label="Shortlisted profiles" value={summary.shortlisted} icon={UserCheck} />
@@ -261,7 +239,7 @@ export default function CandidatesPage() {
           )}
         </section>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }
 

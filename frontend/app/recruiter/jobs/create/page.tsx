@@ -1,17 +1,35 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Briefcase, Save } from "lucide-react";
+import { CircleHelp, Plus, Save, Trash2 } from "lucide-react";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import { createRecruiterJob } from "@/services/recruiter";
-import type { Job } from "@/services/jobs";
+import type { Job, ScreeningQuestion } from "@/services/jobs";
 
 function splitCsv(value: string): string[] {
   return value
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+type QuestionDraft = {
+  key: string;
+  prompt: string;
+  required: boolean;
+  type: ScreeningQuestion["type"];
+  options: string;
+};
+
+function newQuestion(): QuestionDraft {
+  return {
+    key: crypto.randomUUID(),
+    prompt: "",
+    required: true,
+    type: "TEXT",
+    options: "",
+  };
 }
 
 export default function CreateRecruiterJobPage() {
@@ -26,10 +44,24 @@ export default function CreateRecruiterJobPage() {
   const [skills, setSkills] = useState("");
   const [requirements, setRequirements] = useState("");
   const [description, setDescription] = useState("");
+  const [screeningQuestions, setScreeningQuestions] = useState<QuestionDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const onSubmit = async () => {
+    const incompleteQuestion = screeningQuestions.find((question) => !question.prompt.trim());
+    if (incompleteQuestion) {
+      setError("Write or remove each screening question before publishing.");
+      return;
+    }
+    const invalidSelect = screeningQuestions.find(
+      (question) => question.type === "SELECT" && splitCsv(question.options).length < 2
+    );
+    if (invalidSelect) {
+      setError("Multiple-choice questions need at least two comma-separated options.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
@@ -44,6 +76,12 @@ export default function CreateRecruiterJobPage() {
         description,
         skills: splitCsv(skills),
         requirements: splitCsv(requirements),
+        screeningQuestions: screeningQuestions.map((question) => ({
+          prompt: question.prompt.trim(),
+          required: question.required,
+          type: question.type,
+          ...(question.type === "SELECT" ? { options: splitCsv(question.options) } : {}),
+        })),
         status: "OPEN",
       });
       router.push(`/recruiter/jobs/${job.jobId}`);
@@ -58,26 +96,11 @@ export default function CreateRecruiterJobPage() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-5xl px-5 py-5">
-          <Link href="/recruiter/jobs" className="mb-4 flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-900">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to recruiter jobs
-          </Link>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700">
-              <Briefcase className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">Create Job Posting</h1>
-              <p className="text-xs text-gray-500">Publish a role candidates can apply to.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-5xl px-5 py-6">
+    <WorkspaceShell
+      title="Create job posting"
+      subtitle="Publish a role, define the criteria, and add job-relevant screening questions."
+    >
+      <section className="max-w-5xl">
         <div className="rounded-xl border border-gray-100 bg-white p-5">
           {error ? (
             <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -118,6 +141,84 @@ export default function CreateRecruiterJobPage() {
             />
           </label>
 
+          <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex gap-2">
+                <CircleHelp className="mt-0.5 h-4 w-4 flex-none text-blue-700" />
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Job screening questions</h2>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">
+                    Ask up to eight job-relevant questions before candidates upload their resume. Do not request protected or sensitive personal information.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={screeningQuestions.length >= 8}
+                onClick={() => setScreeningQuestions((current) => [...current, newQuestion()])}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add question
+              </button>
+            </div>
+
+            {screeningQuestions.length ? (
+              <div className="mt-4 space-y-3">
+                {screeningQuestions.map((question, index) => (
+                  <div key={question.key} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-slate-700">Question {index + 1}</p>
+                      <button
+                        type="button"
+                        onClick={() => setScreeningQuestions((current) => current.filter((item) => item.key !== question.key))}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 hover:text-rose-800"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Remove
+                      </button>
+                    </div>
+                    <input
+                      value={question.prompt}
+                      onChange={(event) => setScreeningQuestions((current) => current.map((item) => item.key === question.key ? { ...item, prompt: event.target.value } : item))}
+                      placeholder="For example: Briefly describe the most relevant project you have delivered."
+                      className="mt-3 h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[160px_1fr_auto] sm:items-center">
+                      <select
+                        value={question.type}
+                        onChange={(event) => setScreeningQuestions((current) => current.map((item) => item.key === question.key ? { ...item, type: event.target.value as QuestionDraft["type"] } : item))}
+                        className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                      >
+                        <option value="TEXT">Written response</option>
+                        <option value="YES_NO">Yes / No</option>
+                        <option value="SELECT">Multiple choice</option>
+                      </select>
+                      {question.type === "SELECT" ? (
+                        <input
+                          value={question.options}
+                          onChange={(event) => setScreeningQuestions((current) => current.map((item) => item.key === question.key ? { ...item, options: event.target.value } : item))}
+                          placeholder="Option 1, Option 2, Option 3"
+                          className="h-9 rounded-lg border border-slate-200 px-3 text-xs outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                        />
+                      ) : <span className="text-xs text-slate-500">{question.type === "YES_NO" ? "Candidate selects Yes or No." : "Candidate can write up to 2,000 characters."}</span>}
+                      <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={question.required}
+                          onChange={(event) => setScreeningQuestions((current) => current.map((item) => item.key === question.key ? { ...item, required: event.target.checked } : item))}
+                          className="h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-500"
+                        />
+                        Required
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-4 text-xs text-slate-500">No extra questions. Candidates will move directly to their resume and cover note.</p>
+            )}
+          </section>
+
           <label className="mt-4 block text-xs font-semibold text-gray-700">
             Description
             <textarea
@@ -140,7 +241,7 @@ export default function CreateRecruiterJobPage() {
           </button>
         </div>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }
 

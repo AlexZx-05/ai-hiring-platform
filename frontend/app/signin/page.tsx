@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import {
   fetchAuthSession,
@@ -71,6 +71,13 @@ function getRedirectForRole(role: AccountRole) {
   return roleContent.candidate.redirect;
 }
 
+function safeReturnPath(value: string | null): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return null;
+  }
+  return value;
+}
+
 export default function SignInPage() {
   const auth = useAuth();
   const [selectedRole, setSelectedRole] = useState<Role>("recruiter");
@@ -80,6 +87,7 @@ export default function SignInPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCognitoRedirecting, setIsCognitoRedirecting] = useState(false);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     email?: string;
     password?: string;
@@ -87,6 +95,21 @@ export default function SignInPage() {
   }>({});
 
   const content = roleContent[selectedRole];
+
+  useEffect(() => {
+    setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get("returnTo")));
+  }, []);
+
+  const destinationForRole = (role: AccountRole): string => {
+    const savedReturnTo = typeof window === "undefined"
+      ? null
+      : safeReturnPath(localStorage.getItem("post_login_return_to"));
+    const destination = returnTo ?? savedReturnTo ?? getRedirectForRole(role);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("post_login_return_to");
+    }
+    return destination;
+  };
 
   const validate = () => {
     const newErrors: typeof errors = {};
@@ -139,7 +162,7 @@ export default function SignInPage() {
         document.cookie = `user_role=${role}; path=/; max-age=${
           rememberMe ? 2592000 : 86400
         }; SameSite=Lax`;
-        window.location.replace(getRedirectForRole(role));
+        window.location.replace(destinationForRole(role));
         return;
       }
 
@@ -171,6 +194,9 @@ export default function SignInPage() {
   const handleCognitoSSO = async () => {
     try {
       setIsCognitoRedirecting(true);
+      if (returnTo) {
+        localStorage.setItem("post_login_return_to", returnTo);
+      }
       await auth.signinRedirect();
     } catch {
       setIsCognitoRedirecting(false);
@@ -179,7 +205,7 @@ export default function SignInPage() {
 
   const handleDemoLogin = (role: Role) => {
     startDemoSession(role);
-    window.location.replace(role === "recruiter" ? "/dashboard" : "/jobs");
+    window.location.replace(destinationForRole(role));
   };
 
   return (
@@ -397,7 +423,7 @@ export default function SignInPage() {
           <p className="text-center text-xs text-gray-500">
             Don&apos;t have an account?{" "}
             <Link
-              href={`/signup?role=${selectedRole}`}
+              href={`/signup?role=${selectedRole}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
               className="font-medium text-blue-600 hover:underline"
             >
               Sign Up

@@ -1,5 +1,28 @@
 export type JobStatus = "OPEN" | "CLOSED" | "DRAFT";
 
+export type ScreeningQuestionType = "TEXT" | "YES_NO" | "SELECT";
+
+/**
+ * A job-specific question shown before a candidate submits an application.
+ * Questions are configured by the recruiter and are deliberately limited to
+ * job-relevant information; protected-characteristic questions must not be
+ * collected or used for screening.
+ */
+export type ScreeningQuestion = {
+  id: string;
+  prompt: string;
+  required: boolean;
+  type: ScreeningQuestionType;
+  options?: string[];
+};
+
+/** Immutable snapshot of a candidate response at the time of application. */
+export type ApplicationScreeningAnswer = {
+  questionId: string;
+  prompt: string;
+  answer: string;
+};
+
 export type JobRecord = {
   PK: string;
   SK: "PROFILE";
@@ -17,6 +40,7 @@ export type JobRecord = {
   description: string;
   requirements: string[];
   skills: string[];
+  screeningQuestions: ScreeningQuestion[];
   status: JobStatus;
   publicTenantSlug: string;
   publicSlug: string;
@@ -56,6 +80,7 @@ export type ApplicationRecord = {
   resumeId: string;
   resumeObjectKey: string;
   coverNote?: string;
+  screeningAnswers: ApplicationScreeningAnswer[];
   status: ApplicationStatus;
   createdAt: string;
   updatedAt: string;

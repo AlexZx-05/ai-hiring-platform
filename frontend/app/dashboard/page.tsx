@@ -19,6 +19,7 @@ import {
   Search,
   UploadCloud,
   Users,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
@@ -154,6 +155,7 @@ export default function DashboardPage() {
         { label: "Candidates", href: "/candidates", icon: Users },
         { label: "Leaderboard", href: "/rankings", icon: FileSearch },
         { label: "Create job", href: "/recruiter/jobs/create", icon: PlusCircle },
+        ...(role === "admin" ? [{ label: "Recruiter access", href: "/admin/recruiters", icon: UserPlus }] : []),
       ]
     : [
         { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -161,6 +163,14 @@ export default function DashboardPage() {
         { label: "My applications", href: "/applications", icon: FileText },
         { label: "Resume analysis", href: "/upload", icon: UploadCloud },
       ];
+
+  const activeHref = [...navItems]
+    .filter(
+      ({ href }) =>
+        pathname === href ||
+        (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   const jobById = useMemo(
     () => new Map(data.jobs.map((job) => [job.jobId, job])),
@@ -223,7 +233,7 @@ export default function DashboardPage() {
 
         <nav className="flex-1 space-y-1 px-3 py-5" aria-label="Dashboard navigation">
           {navItems.map(({ label, href, icon: Icon }) => {
-            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
+            const active = href === activeHref;
             return (
               <Link key={href} href={href} onClick={() => setSidebarOpen(false)} className={`flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium transition ${active ? "bg-blue-600 text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
                 <Icon className="h-4 w-4 flex-none" />{label}

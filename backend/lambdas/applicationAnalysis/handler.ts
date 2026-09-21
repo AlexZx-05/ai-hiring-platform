@@ -247,9 +247,30 @@ function buildJobText(
   ].join("\n");
 }
 
+function buildScreeningResponseText(
+  application: Record<string, unknown>
+): string {
+  const answers = Array.isArray(application.screeningAnswers)
+    ? application.screeningAnswers
+    : [];
+
+  if (!answers.length) {
+    return "No job screening responses were provided.";
+  }
+
+  return answers
+    .slice(0, 8)
+    .map((answer) => {
+      const item = answer as Record<string, unknown>;
+      return `Question: ${String(item.prompt ?? "").slice(0, 300)}\nResponse: ${String(item.answer ?? "").slice(0, 2000)}`;
+    })
+    .join("\n\n");
+}
+
 function buildPrompt(
   resumeText: string,
-  jobText: string
+  jobText: string,
+  screeningResponseText: string
 ): string {
   return `
 You are an AI-assisted recruitment screening system.
@@ -280,6 +301,8 @@ Rules:
 - matchedSkills must contain skills supported by the resume and relevant to the job.
 - missingSkills must contain important job skills/requirements that are not supported by the resume.
 - summary must briefly explain the candidate's job relevance.
+- You may use job-specific screening responses as supporting context, but never infer experience that is not stated there or in the resume.
+- Ignore and do not evaluate protected or sensitive personal information, even if it appears in a response.
 - Do not include markdown.
 - Do not include code fences.
 - Do not include additional JSON fields.
@@ -289,6 +312,9 @@ ${resumeText.slice(0, 12000)}
 
 JOB:
 ${jobText.slice(0, 6000)}
+
+JOB-SPECIFIC SCREENING RESPONSES:
+${screeningResponseText.slice(0, 6000)}
 `.trim();
 }
 
@@ -360,13 +386,15 @@ async function findResumeExtraction(
 
 async function callAI(
   resumeText: string,
-  jobText: string
+  jobText: string,
+  screeningResponseText: string
 ): Promise<NormalizedAnalysis> {
   const key = await apiKey();
 
   const prompt = buildPrompt(
     resumeText,
-    jobText
+    jobText,
+    screeningResponseText
   );
 
   const response = await fetch(
@@ -558,6 +586,8 @@ export const main: Handler<
    */
   const jobText =
     buildJobText(job);
+  const screeningResponseText =
+    buildScreeningResponseText(application);
 
   /*
    * 4. Call xAI.
@@ -565,7 +595,8 @@ export const main: Handler<
   const normalized =
     await callAI(
       resumeText,
-      jobText
+      jobText,
+      screeningResponseText
     );
 
   const now =

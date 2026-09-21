@@ -5,9 +5,6 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const protectedRoutes     = ["/dashboard", "/upload", "/candidates", "/jobs", "/applications", "/recruiter", "/analytics", "/rankings"];
-  const recruiterOnlyRoutes = ["/recruiter", "/candidates", "/analytics", "/rankings"];
-  const candidateOnlyRoutes = ["/upload", "/jobs", "/applications"];
-
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route));
 
   if (isProtected) {
@@ -16,26 +13,13 @@ export function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
 
-    const isRecruiterOnly = recruiterOnlyRoutes.some((route) =>
-      pathname.startsWith(route)
-    );
-    if (isRecruiterOnly) {
-      const role = request.cookies.get("user_role")?.value ?? "candidate";
-      const allowedRoles = new Set(["recruiter", "admin"]);
-      if (!allowedRoles.has(role)) {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-    }
-
-    const isCandidateOnly = candidateOnlyRoutes.some((route) =>
-      pathname.startsWith(route)
-    );
-    if (isCandidateOnly) {
-      const role = request.cookies.get("user_role")?.value ?? "candidate";
-      if (role !== "candidate" && role !== "admin") {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-      }
-    }
+    /*
+     * A role cookie is created in the browser and is neither signed nor
+     * authoritative. Using it as a server-side authorization decision caused
+     * valid users to be redirected to /dashboard when the cookie was stale.
+     * The proxy establishes only that a session exists; every protected API
+     * verifies the Cognito token and role before returning any tenant data.
+     */
   }
 
   return NextResponse.next();

@@ -12,6 +12,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { getRecruiterCandidate, type CandidateRecord } from "@/services/recruiter";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
 type ApplicationRecord = CandidateRecord & {
   applicationId?: string;
@@ -21,6 +22,7 @@ type ApplicationRecord = CandidateRecord & {
   jobId?: string;
   recruiterNote?: string;
   resumeId?: string;
+  screeningAnswers?: Array<{ questionId: string; prompt?: string; answer: string }>;
   status?: string;
   updatedAt?: string;
 };
@@ -183,9 +185,11 @@ export default function RecruiterCandidateProfilePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-5 py-5">
+    <WorkspaceShell
+      title={profile.name ?? "Candidate profile"}
+      subtitle="Review application history, resume evidence, and AI screening results."
+    >
+      <section className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
           <Link
             href="/candidates"
             className="mb-4 flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900"
@@ -214,10 +218,9 @@ export default function RecruiterCandidateProfilePage() {
               Contact candidate
             </button>
           </div>
-        </div>
       </section>
 
-      <section className="mx-auto max-w-6xl space-y-6 px-5 py-6">
+      <section className="mt-6 max-w-6xl space-y-6">
         {error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
@@ -276,6 +279,19 @@ export default function RecruiterCandidateProfilePage() {
                       ) : (
                         <p className="mt-3 text-sm text-slate-500">No candidate cover note provided.</p>
                       )}
+                      {application.screeningAnswers?.length ? (
+                        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Screening responses</p>
+                          <dl className="mt-2 space-y-2">
+                            {application.screeningAnswers.map((answer) => (
+                              <div key={answer.questionId}>
+                                <dt className="text-xs font-medium text-slate-700">{answer.prompt ?? "Screening question"}</dt>
+                                <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-900">{answer.answer}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </div>
+                      ) : null}
                       {application.recruiterNote ? (
                         <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
                           Recruiter note: {application.recruiterNote}
@@ -355,7 +371,7 @@ export default function RecruiterCandidateProfilePage() {
           </div>
         )}
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }
 

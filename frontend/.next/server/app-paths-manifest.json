@@ -1,8 +1,10 @@
 {
   "/_global-error/page": "app/_global-error/page.js",
   "/_not-found/page": "app/_not-found/page.js",
+  "/admin/recruiters/page": "app/admin/recruiters/page.js",
   "/applications/page": "app/applications/page.js",
   "/candidates/page": "app/candidates/page.js",
+  "/careers/[tenant]/[slug]/page": "app/careers/[tenant]/[slug]/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/forgot-password/page": "app/forgot-password/page.js",
   "/jobs/[id]/page": "app/jobs/[id]/page.js",

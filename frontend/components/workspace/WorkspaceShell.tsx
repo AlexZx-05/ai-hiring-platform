@@ -11,9 +11,11 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  PlusCircle,
   Search,
   UploadCloud,
   Users,
+  UserPlus,
   X,
 } from "lucide-react";
 import {
@@ -104,7 +106,7 @@ export default function WorkspaceShell({
           icon: LayoutDashboard,
         },
         {
-          label: "Jobs",
+          label: "Job postings",
           href: "/recruiter/jobs",
           icon: BriefcaseBusiness,
         },
@@ -114,10 +116,18 @@ export default function WorkspaceShell({
           icon: Users,
         },
         {
-          label: "Rankings",
+          label: "Leaderboard",
           href: "/rankings",
           icon: BarChart2,
         },
+        {
+          label: "Create job",
+          href: "/recruiter/jobs/create",
+          icon: PlusCircle,
+        },
+        ...(role === "admin"
+          ? [{ label: "Recruiter access", href: "/admin/recruiters", icon: UserPlus }]
+          : []),
       ]
     : [
         {
@@ -126,21 +136,29 @@ export default function WorkspaceShell({
           icon: LayoutDashboard,
         },
         {
-          label: "Jobs",
+          label: "Find jobs",
           href: "/jobs",
           icon: Search,
         },
         {
-          label: "Applications",
+          label: "My applications",
           href: "/applications",
           icon: FileText,
         },
         {
-          label: "Resume AI",
+          label: "Resume analysis",
           href: "/upload",
           icon: UploadCloud,
         },
       ];
+
+  const activeHref = [...navItems]
+    .filter(
+      ({ href }) =>
+        pathname === href ||
+        (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+    )
+    .sort((left, right) => right.href.length - left.href.length)[0]?.href;
 
   const logout = () => {
     clearAuthArtifacts();
@@ -216,10 +234,7 @@ export default function WorkspaceShell({
         >
           {navItems.map(
             ({ label, href, icon: Icon }) => {
-              const active =
-                pathname === href ||
-                (href !== "/dashboard" &&
-                  pathname.startsWith(`${href}/`));
+              const active = href === activeHref;
 
               return (
                 <Link

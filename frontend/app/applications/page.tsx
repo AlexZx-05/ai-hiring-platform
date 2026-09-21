@@ -19,6 +19,19 @@ const statusStyles: Record<Application["status"], string> = {
   REJECTED: "bg-rose-50 text-rose-700",
 };
 
+const statusGuidance: Record<Application["status"], string> = {
+  APPLIED: "Received — your application is queued for secure processing.",
+  PARSING: "Your resume is being read and prepared for job-specific screening.",
+  AI_REVIEWED: "Screening is complete and the hiring team can now review your profile.",
+  UNDER_REVIEW: "A recruiter is reviewing your experience and application responses.",
+  SHORTLISTED: "You are on the recruiter’s shortlist for this role.",
+  INTERVIEW_RECOMMENDED: "The team would like to move forward; expect a scheduling update.",
+  INTERVIEW_SCHEDULED: "Your interview has been scheduled. Check your recruiter communication for details.",
+  OFFER: "The hiring team has shared an offer update with you.",
+  HIRED: "Congratulations — this application is marked as hired.",
+  REJECTED: "The team has closed this application. Thank you for your time and interest.",
+};
+
 export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -109,6 +122,9 @@ export default function ApplicationsPage() {
                 <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyles[application.status]}`}>
                   {application.status.replace("_", " ")}
                 </span>
+                <p className="mt-2 max-w-xs text-[11px] leading-4 text-gray-500">
+                  {statusGuidance[application.status]}
+                </p>
                 <span className="text-xs text-gray-500">
                   {new Date(application.createdAt).toLocaleString()}
                 </span>
