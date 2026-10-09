@@ -8,3 +8,5 @@ resume_bucket_force_destroy = true
 
 # Set this from a private tfvars file or TF_VAR_xai_api_key.
 xai_api_key = ""
+ai_api_url  = "https://api.groq.com/openai/v1/chat/completions"
+ai_model_id = "openai/gpt-oss-120b"

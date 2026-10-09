@@ -6,7 +6,6 @@ import { AuthProvider, useAuth } from "react-oidc-context";
 import {
   clearAuthArtifacts,
   cognitoAuthConfig,
-  getDemoSession,
   persistAuthArtifacts,
 } from "@/services/auth";
 
@@ -21,11 +20,6 @@ function AuthCookieSync() {
         auth.user.access_token,
         auth.user.id_token
       );
-    } else if (getDemoSession()) {
-      // Preserve the development-only demo workspace session.
-      return;
-    } else {
-      clearAuthArtifacts();
     }
   }, [
     auth.isAuthenticated,

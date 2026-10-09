@@ -76,6 +76,11 @@ function parseStringList(value: unknown): string[] {
 }
 
 function normalizeAnalysisRecord(analysis: Record<string, unknown>) {
+  const rawScoreBreakdown = analysis.scoreBreakdown;
+  const scoreBreakdown = rawScoreBreakdown && typeof rawScoreBreakdown === "object" && !Array.isArray(rawScoreBreakdown)
+    ? rawScoreBreakdown as Record<string, unknown>
+    : undefined;
+
   return {
     atsScore:
       typeof analysis.atsScore === "number"
@@ -89,6 +94,18 @@ function normalizeAnalysisRecord(analysis: Record<string, unknown>) {
       typeof analysis.confidence === "number"
         ? analysis.confidence
         : Number(analysis.confidence ?? 0),
+    analysisScoreBreakdown: scoreBreakdown
+      ? {
+          requiredSkills: Number(scoreBreakdown.requiredSkills ?? 0),
+          responsibilities: Number(scoreBreakdown.responsibilities ?? 0),
+          relevantExperience: Number(scoreBreakdown.relevantExperience ?? 0),
+        }
+      : undefined,
+    analysisEvidence: Array.isArray(analysis.evidence)
+      ? analysis.evidence.slice(0, 12)
+      : [],
+    analysisStrengths: parseStringList(analysis.strengths).slice(0, 8),
+    analysisImprovementTips: parseStringList(analysis.improvementTips).slice(0, 8),
   };
 }
 
@@ -188,6 +205,35 @@ async function listJobApplications(
 
       const latestAnalysis = analysis.Items?.[0];
       if (!latestAnalysis) {
+        if (application.status === "PARSING" && application.resumeId && application.PK) {
+          const parseStatus = await dynamo.send(
+            new QueryCommand({
+              TableName: tableName,
+              KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+              ExpressionAttributeValues: {
+                ":pk": application.PK,
+                ":sk": `RESUME#${application.resumeId}#STATUS#`,
+              },
+              ScanIndexForward: false,
+              Limit: 1,
+            })
+          );
+          const latestParseStatus = parseStatus.Items?.[0];
+          if (latestParseStatus?.status === "FAILED") {
+            const details = String(latestParseStatus.details ?? "");
+            let processingError = details;
+            try {
+              const parsedDetails = JSON.parse(details) as { message?: unknown };
+              processingError = String(parsedDetails.message ?? details);
+            } catch {
+              // Keep the original detail if it is not JSON.
+            }
+            return {
+              ...application,
+              processingError: processingError || "Resume parsing failed.",
+            };
+          }
+        }
         return application;
       }
 

@@ -20,10 +20,10 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
+    // This REST API's Cognito authorizer expects an ID token when the route has
+    // no OAuth scopes. Lambdas calling Cognito GetUser receive the access token
+    // separately through X-Cognito-Access-Token on the endpoints that need it.
     const token =
-      // REST API Gateway validates ID tokens when no OAuth scope is attached
-      // to the route. The backend resolves tenant membership from Cognito if
-      // an older token does not include the custom tenant attribute.
       localStorage.getItem("auth_id_token") ??
       localStorage.getItem("auth_access_token");
 

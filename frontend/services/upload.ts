@@ -17,7 +17,19 @@ export type PresignUploadResponse = {
 export async function requestResumeUploadUrl(
   payload: PresignUploadInput
 ): Promise<PresignUploadResponse> {
-  const response = await api.post<PresignUploadResponse>("/upload/url", payload);
+  const accessToken =
+    typeof window !== "undefined"
+      ? localStorage.getItem("auth_access_token")
+      : null;
+  if (!accessToken) {
+    throw new Error("Your sign-in session has expired. Please sign in again.");
+  }
+
+  const response = await api.post<PresignUploadResponse>("/upload/url", payload, {
+    // API Gateway validates the ID token in Authorization. The upload Lambda
+    // uses GetUser, which requires the matching Cognito access token.
+    headers: { "X-Cognito-Access-Token": accessToken },
+  });
   return response.data;
 }
 

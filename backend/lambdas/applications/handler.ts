@@ -3,7 +3,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { dynamo, requireTableName } from "../../shared/dynamodb.js";
@@ -28,6 +28,7 @@ type CreateApplicationRequest = {
   publicSlug?: string;
   resumeId?: string;
   resumeObjectKey?: string;
+  resumeText?: string;
   coverNote?: string;
   screeningAnswers?: Array<{
     questionId?: string;
@@ -40,16 +41,20 @@ function candidatePk(tenantId: string, candidateId: string): string {
 }
 
 function validateApplication(payload: CreateApplicationRequest): Required<
-  Pick<CreateApplicationRequest, "jobId" | "publicTenantSlug" | "publicSlug" | "resumeId" | "resumeObjectKey">
+  Pick<CreateApplicationRequest, "jobId" | "publicTenantSlug" | "publicSlug" | "resumeId" | "resumeObjectKey" | "resumeText">
 > & Pick<CreateApplicationRequest, "coverNote"> {
   const jobId = payload.jobId?.trim() ?? "";
   const resumeId = payload.resumeId?.trim() ?? "";
   const resumeObjectKey = payload.resumeObjectKey?.trim() ?? "";
   const publicTenantSlug = payload.publicTenantSlug?.trim().toLowerCase() ?? "";
   const publicSlug = payload.publicSlug?.trim().toLowerCase() ?? "";
+  const resumeText = payload.resumeText?.trim() ?? "";
 
-  if (!jobId || !publicTenantSlug || !publicSlug || !resumeId || !resumeObjectKey) {
-    throw new Error("jobId, publicTenantSlug, publicSlug, resumeId, and resumeObjectKey are required");
+  if (!jobId || !publicTenantSlug || !publicSlug || !resumeId || !resumeObjectKey || !resumeText) {
+    throw new Error("jobId, publicTenantSlug, publicSlug, resumeId, resumeObjectKey, and resumeText are required");
+  }
+  if (resumeText.length < 40 || Buffer.byteLength(resumeText, "utf8") > 200_000) {
+    throw new Error("Resume text must contain at least 40 characters and be no larger than 200 KB");
   }
 
   return {
@@ -58,6 +63,7 @@ function validateApplication(payload: CreateApplicationRequest): Required<
     publicSlug,
     resumeId,
     resumeObjectKey,
+    resumeText,
     coverNote: payload.coverNote?.trim() || undefined,
   };
 }
@@ -224,22 +230,64 @@ async function createApplication(
     GSI3SK: `APPLICATION#${applicationId}`,
   };
 
-  await dynamo.send(
-    new PutCommand({
-      TableName: tableName,
-      Item: item,
-      ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
-    })
-  );
-
-  const parseStatus = await dynamo.send(new QueryCommand({
-    TableName: tableName,
-    KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-    ExpressionAttributeValues: { ":pk": item.PK, ":sk": `RESUME#${payload.resumeId}#STATUS#` },
-    ScanIndexForward: false,
-    Limit: 1,
+  const parsedAt = now;
+  await dynamo.send(new TransactWriteCommand({
+    TransactItems: [
+      {
+        Put: {
+          TableName: tableName,
+          Item: item,
+          ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+        },
+      },
+      {
+        Put: {
+          TableName: tableName,
+          Item: {
+            PK: candidatePk(auth.tenantId, auth.sub),
+            SK: `RESUME#${payload.resumeId}#EXTRACTION#${parsedAt}`,
+            GSI1PK: `RESUME#${payload.resumeId}`,
+            GSI1SK: `EXTRACTION#${parsedAt}`,
+            GSI2PK: `TENANT#${auth.tenantId}#EXTRACTIONS`,
+            GSI2SK: parsedAt,
+            entityType: "resumeExtraction",
+            tenantId: auth.tenantId,
+            candidateId: auth.sub,
+            resumeId: payload.resumeId,
+            objectKey: payload.resumeObjectKey,
+            bucketName: RESUME_BUCKET_NAME,
+            parsedAt,
+            extractionVersion: parsedAt,
+            normalized: JSON.stringify({ rawTextLength: payload.resumeText.length }),
+            rawText: payload.resumeText,
+          },
+          ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)",
+        },
+      },
+      {
+        Put: {
+          TableName: tableName,
+          Item: {
+            PK: candidatePk(auth.tenantId, auth.sub),
+            SK: `RESUME#${payload.resumeId}#STATUS#${parsedAt}`,
+            GSI1PK: `RESUME#${payload.resumeId}`,
+            GSI1SK: `STATUS#${parsedAt}`,
+            GSI2PK: `TENANT#${auth.tenantId}#PARSE_STATUS`,
+            GSI2SK: parsedAt,
+            entityType: "resumeParseStatus",
+            tenantId: auth.tenantId,
+            candidateId: auth.sub,
+            resumeId: payload.resumeId,
+            status: "SUCCEEDED",
+            details: JSON.stringify({ source: "browser-pdfjs", parsedAt }),
+            updatedAt: parsedAt,
+          },
+        },
+      },
+    ],
   }));
-  if (parseStatus.Items?.[0]?.status === "SUCCEEDED" && APPLICATION_ANALYSIS_FUNCTION_NAME) {
+
+  if (APPLICATION_ANALYSIS_FUNCTION_NAME) {
     await lambda.send(new InvokeCommand({
       FunctionName: APPLICATION_ANALYSIS_FUNCTION_NAME,
       InvocationType: "Event",

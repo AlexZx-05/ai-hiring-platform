@@ -8,3 +8,5 @@ variable "xai_api_key" {
   sensitive = true
   default   = ""
 }
+variable "ai_api_url" { type = string }
+variable "ai_model_id" { type = string }

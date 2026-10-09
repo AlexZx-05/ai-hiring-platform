@@ -58,6 +58,7 @@ export type CreateApplicationInput = {
   publicSlug: string;
   resumeId: string;
   resumeObjectKey: string;
+  resumeText: string;
   coverNote?: string;
   screeningAnswers?: ScreeningAnswer[];
 };

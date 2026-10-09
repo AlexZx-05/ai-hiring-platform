@@ -11,6 +11,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { createApplication, type Job } from "@/services/jobs";
+import { extractPdfText } from "@/services/pdf";
 import { requestResumeUploadUrl, uploadResumeToS3 } from "@/services/upload";
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -22,7 +23,8 @@ type ApplicationFormProps = {
 function errorMessage(error: unknown): string {
   return (
     (error as { response?: { data?: { message?: string } } })?.response?.data
-      ?.message ?? "We could not submit your application. Please try again."
+      ?.message ??
+    (error instanceof Error ? error.message : "We could not submit your application. Please try again.")
   );
 }
 
@@ -65,6 +67,7 @@ export default function ApplicationForm({ job }: ApplicationFormProps) {
 
     setSubmitting(true);
     try {
+      const resumeText = await extractPdfText(file);
       const upload = await requestResumeUploadUrl({
         fileName: file.name,
         contentType: file.type,
@@ -78,6 +81,7 @@ export default function ApplicationForm({ job }: ApplicationFormProps) {
         publicSlug: job.publicSlug,
         resumeId: upload.resumeId,
         resumeObjectKey: upload.objectKey,
+        resumeText,
         coverNote: coverNote.trim() || undefined,
         screeningAnswers: questions
           .map((question) => ({
@@ -104,7 +108,7 @@ export default function ApplicationForm({ job }: ApplicationFormProps) {
           <div>
             <h2 className="text-base font-semibold text-emerald-950">Application submitted</h2>
             <p className="mt-1 text-sm leading-6 text-emerald-900">
-              Your resume is now being parsed and matched to this role. We will show each next step in your application tracker.
+              Your resume text was extracted in your browser and submitted for AI matching to this role. We will show each next step in your application tracker.
             </p>
             <p className="mt-3 text-xs font-medium text-emerald-800">Reference: {applicationId}</p>
             <Link
@@ -229,7 +233,7 @@ export default function ApplicationForm({ job }: ApplicationFormProps) {
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-blue-300 sm:w-auto"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          {submitting ? "Submitting application..." : "Submit application"}
+          {submitting ? "Reading resume and submitting..." : "Submit application"}
         </button>
       </div>
     </section>

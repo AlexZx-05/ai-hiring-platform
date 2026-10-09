@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Briefcase, CheckCircle2, MapPin } from "lucide-react";
 import ApplicationForm from "@/components/jobs/ApplicationForm";
+import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import { getJob, type Job } from "@/services/jobs";
 
 function getErrorMessage(error: unknown): string {
@@ -38,39 +39,86 @@ export default function JobDetailPage() {
   }, [params.id]);
 
   if (loading) {
-    return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-6xl rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Loading role...</div></main>;
+    return (
+      <WorkspaceShell
+        title="Job details"
+        subtitle="Review the role before submitting your application."
+      >
+        <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          Loading role...
+        </div>
+      </WorkspaceShell>
+    );
   }
 
   if (!job) {
-    return <main className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-6xl rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">{error ?? "This role is not available."}</div></main>;
+    return (
+      <WorkspaceShell
+        title="Job details"
+        subtitle="Review the role before submitting your application."
+        actions={
+          <Link
+            href="/jobs"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Back to jobs
+          </Link>
+        }
+      >
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+          {error ?? "This role is not available."}
+        </div>
+      </WorkspaceShell>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-10 text-slate-900">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-5 py-5">
-          <Link href="/jobs" className="mb-4 inline-flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to jobs
-          </Link>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white"><Briefcase className="h-5 w-5" /></div>
-                <div><h1 className="text-xl font-semibold">{job.title}</h1><p className="text-sm text-slate-500">{job.department}</p></div>
+    <WorkspaceShell
+      title={job.title}
+      subtitle={`${job.department} · ${job.location}`}
+      actions={
+        <Link
+          href="/applications"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          My applications
+        </Link>
+      }
+    >
+      <Link
+        href="/jobs"
+        className="mb-5 inline-flex items-center gap-2 text-xs font-medium text-slate-500 hover:text-slate-900"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to jobs
+      </Link>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white">
+                <Briefcase className="h-5 w-5" />
               </div>
-              <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
-                <span className="rounded-md bg-slate-100 px-2 py-1">{job.employmentType}</span>
-                <span className="rounded-md bg-slate-100 px-2 py-1">{job.workMode}</span>
-                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1"><MapPin className="h-3.5 w-3.5" />{job.location}</span>
-                <span className="rounded-md bg-slate-100 px-2 py-1">{job.experienceLevel}</span>
+              <div>
+                <h2 className="text-xl font-semibold">{job.title}</h2>
+                <p className="text-sm text-slate-500">{job.department}</p>
               </div>
             </div>
-            <Link href="/applications" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">My applications</Link>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-600">
+              <span className="rounded-md bg-slate-100 px-2 py-1">{job.employmentType}</span>
+              <span className="rounded-md bg-slate-100 px-2 py-1">{job.workMode}</span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1">
+                <MapPin className="h-3.5 w-3.5" />
+                {job.location}
+              </span>
+              <span className="rounded-md bg-slate-100 px-2 py-1">{job.experienceLevel}</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-6 px-5 py-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
           {source === "demo" ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
@@ -98,6 +146,6 @@ export default function JobDetailPage() {
           </article>
         </aside>
       </section>
-    </main>
+    </WorkspaceShell>
   );
 }

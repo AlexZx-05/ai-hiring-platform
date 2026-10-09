@@ -28,3 +28,13 @@ variable "xai_api_key" {
   sensitive = true
   default   = ""
 }
+
+variable "ai_api_url" {
+  type    = string
+  default = "https://api.x.ai/v1/chat/completions"
+}
+
+variable "ai_model_id" {
+  type    = string
+  default = "grok-3-mini"
+}

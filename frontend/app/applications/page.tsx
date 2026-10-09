@@ -37,6 +37,9 @@ export default function ApplicationsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasPendingProcessing = applications.some(
+    (application) => application.status === "PARSING" && !application.processingError
+  );
 
   const loadApplications = () => {
     setLoading(true);
@@ -59,6 +62,30 @@ export default function ApplicationsPage() {
     loadApplications();
   }, []);
 
+  useEffect(() => {
+    if (!hasPendingProcessing) return;
+
+    let active = true;
+    const interval = window.setInterval(() => {
+      listApplications()
+        .then((applicationItems) => {
+          if (active) setApplications(applicationItems);
+        })
+        .catch((err) => {
+          if (!active) return;
+          const message =
+            (err as { response?: { data?: { message?: string } } })?.response?.data
+              ?.message ?? "Unable to refresh application status.";
+          setError(message);
+        });
+    }, 10_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [hasPendingProcessing]);
+
   const jobById = useMemo(
     () => new Map(jobs.map((job) => [job.jobId, job])),
     [jobs]
@@ -67,7 +94,7 @@ export default function ApplicationsPage() {
   return (
     <WorkspaceShell
       title="My Applications"
-      subtitle="Track where every application stands after resume upload and AI screening."
+      subtitle="Track each application after resume upload and AI screening. Pending applications refresh automatically."
       actions={
         <button
           type="button"

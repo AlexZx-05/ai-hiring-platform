@@ -40,6 +40,19 @@ const statusStyle: Record<RecruiterApplication["status"], string> = {
   REJECTED: "bg-rose-50 text-rose-700",
 };
 
+const statusLabels: Record<RecruiterApplication["status"], string> = {
+  APPLIED: "Submitted",
+  PARSING: "Resume processing",
+  AI_REVIEWED: "AI review complete",
+  UNDER_REVIEW: "Recruiter review",
+  SHORTLISTED: "Shortlisted",
+  INTERVIEW_RECOMMENDED: "Interview recommended",
+  INTERVIEW_SCHEDULED: "Interview scheduled",
+  OFFER: "Offer",
+  HIRED: "Hired",
+  REJECTED: "Closed",
+};
+
 const forwardActions: Partial<Record<RecruiterApplication["status"], {
   label: string;
   status: RecruiterApplication["status"];
@@ -53,6 +66,32 @@ const forwardActions: Partial<Record<RecruiterApplication["status"], {
   INTERVIEW_SCHEDULED: { label: "Record offer", status: "OFFER", icon: CheckCircle2, className: "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" },
   OFFER: { label: "Mark hired", status: "HIRED", icon: CheckCircle2, className: "bg-emerald-100 text-emerald-800 hover:bg-emerald-200" },
 };
+
+const RECOMMENDED_REVIEW_THRESHOLD = 70;
+
+function getReviewRecommendation(application: RecruiterApplication) {
+  if (typeof application.atsScore !== "number") {
+    return {
+      label: "Scoring in progress",
+      detail: "The job-specific resume analysis is not ready yet.",
+      className: "border-slate-200 bg-slate-50 text-slate-700",
+    };
+  }
+
+  if (application.atsScore >= RECOMMENDED_REVIEW_THRESHOLD) {
+    return {
+      label: "Recommend next-stage review",
+      detail: `${application.atsScore}% meets the suggested ${RECOMMENDED_REVIEW_THRESHOLD}% review threshold. Verify the candidate's evidence against the role requirements before advancing.`,
+      className: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    };
+  }
+
+  return {
+    label: "Manual review recommended",
+    detail: `${application.atsScore}% is below the suggested ${RECOMMENDED_REVIEW_THRESHOLD}% threshold. Review the missing skills and role requirements; do not reject based on the AI score alone.`,
+    className: "border-amber-200 bg-amber-50 text-amber-950",
+  };
+}
 
 function candidateEmailUrl(application: RecruiterApplication, jobTitle?: string): string | null {
   if (!application.candidateEmail) return null;
@@ -134,6 +173,33 @@ export default function RecruiterJobApplicantsPage() {
   useEffect(() => {
     void load();
   }, [params.id]);
+
+  const hasPendingAiAnalysis = applications.some(
+    (application) => application.status === "PARSING" && !application.processingError
+  );
+
+  useEffect(() => {
+    if (!params.id || !hasPendingAiAnalysis) return;
+
+    let active = true;
+    const interval = window.setInterval(() => {
+      listJobApplications(params.id)
+        .then((items) => {
+          if (active) {
+            setApplications(items);
+            setError(null);
+          }
+        })
+        .catch((pollError) => {
+          if (active) setError(getErrorMessage(pollError, "Unable to refresh applicant analysis."));
+        });
+    }, 10_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [params.id, hasPendingAiAnalysis]);
 
   const onStatus = async (
     application: RecruiterApplication,
@@ -257,6 +323,10 @@ export default function RecruiterJobApplicantsPage() {
           />
         </div>
 
+        <p className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-900">
+          Applicants are ordered by their job-specific match score when analysis is available. The score summarizes documented skills, responsibilities, and relevant experience; it is a prioritization aid, not a recommendation to hire or reject.
+        </p>
+
         {error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
@@ -287,13 +357,13 @@ export default function RecruiterJobApplicantsPage() {
                         {application.candidateEmail ?? application.candidateId}
                       </Link>
                       <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyle[application.status]}`}>
-                        {application.status.replaceAll("_", " ")}
+                        {statusLabels[application.status]}
                       </span>
                     </div>
 
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
                       <DataPoint
-                        label="Screening"
+                        label="AI match score"
                         value={getScreeningLabel(application)}
                         tone={typeof application.atsScore === "number" ? "text-slate-900" : "text-amber-700"}
                       />
@@ -304,6 +374,32 @@ export default function RecruiterJobApplicantsPage() {
                         tone="text-slate-900"
                       />
                     </div>
+
+                    {application.processingError ? (
+                      <div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                        <p className="font-semibold">Resume processing did not complete</p>
+                        <p className="mt-1 leading-6">{application.processingError}</p>
+                      </div>
+                    ) : null}
+
+                    {(() => {
+                      const recommendation = getReviewRecommendation(application);
+                      return (
+                        <section className={`mt-4 rounded-xl border p-4 ${recommendation.className}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide">AI next-step guidance</h3>
+                            {typeof application.atsScore === "number" ? (
+                              <span className="rounded-full bg-white/80 px-2 py-1 text-[11px] font-semibold">
+                                Suggested threshold: {RECOMMENDED_REVIEW_THRESHOLD}%
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm font-semibold">{recommendation.label}</p>
+                          <p className="mt-1 text-sm leading-6">{recommendation.detail}</p>
+                          <p className="mt-2 text-[11px] leading-5 opacity-80">This score is a review aid, not an automatic hiring decision.</p>
+                        </section>
+                      );
+                    })()}
 
                     <div className="mt-4 grid gap-4 lg:grid-cols-2">
                       <SkillBlock
@@ -317,6 +413,24 @@ export default function RecruiterJobApplicantsPage() {
                         emptyLabel="No missing-skill analysis is available yet."
                       />
                     </div>
+
+                    {application.analysisSummary ? (
+                      <section className="mt-4 rounded-xl border border-violet-100 bg-violet-50/60 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="text-xs font-semibold uppercase tracking-wide text-violet-900">AI fit summary</h3>
+                          {typeof application.analysisConfidence === "number" ? (
+                            <span className="rounded-full bg-white px-2 py-1 text-[11px] font-medium text-violet-800">
+                              Analysis confidence {Math.round(application.analysisConfidence * 100)}%
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{application.analysisSummary}</p>
+                      </section>
+                    ) : null}
+
+                    {application.analysisScoreBreakdown || application.analysisEvidence?.length || application.analysisStrengths?.length || application.analysisImprovementTips?.length ? (
+                      <AnalysisDetails application={application} />
+                    ) : null}
 
                     {application.screeningAnswers?.length ? (
                       <ScreeningAnswers answers={application.screeningAnswers} />
@@ -479,6 +593,101 @@ function ScreeningAnswers({
           </div>
         ))}
       </dl>
+    </section>
+  );
+}
+
+function AnalysisDetails({ application }: { application: RecruiterApplication }) {
+  const breakdown = application.analysisScoreBreakdown;
+  const evidenceStatus = {
+    SUPPORTED: { label: "Evidence found", style: "bg-emerald-50 text-emerald-700" },
+    PARTIAL: { label: "Partial evidence", style: "bg-amber-50 text-amber-800" },
+    NOT_FOUND: { label: "Not found", style: "bg-slate-100 text-slate-600" },
+  } as const;
+
+  const scoreRows = breakdown
+    ? [
+        { label: "Required skills", score: breakdown.requiredSkills, weight: "50%" },
+        { label: "Role responsibilities", score: breakdown.responsibilities, weight: "30%" },
+        { label: "Relevant experience", score: breakdown.relevantExperience, weight: "20%" },
+      ]
+    : [];
+
+  return (
+    <section className="mt-4 space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+      {scoreRows.length ? (
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">How the match score is built</h3>
+            <span className="text-[11px] text-slate-500">Skills 50% · Responsibilities 30% · Experience 20%</span>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {scoreRows.map((row) => {
+              const score = Math.max(0, Math.min(100, Number(row.score) || 0));
+              return (
+                <div key={row.label} className="rounded-lg bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium text-slate-700">{row.label}</span>
+                    <span className="text-slate-500">{row.weight}</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200" role="meter" aria-label={`${row.label} score`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={score}>
+                    <div className="h-full rounded-full bg-indigo-600" style={{ width: `${score}%` }} />
+                  </div>
+                  <p className="mt-1 text-right text-xs font-semibold text-slate-800">{Math.round(score)}%</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {application.analysisEvidence?.length ? (
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-700">Role criteria and candidate evidence</h3>
+          <ul className="mt-2 divide-y divide-slate-100">
+            {application.analysisEvidence.map((item, index) => {
+              const status = evidenceStatus[item.status] ?? evidenceStatus.NOT_FOUND;
+              return (
+                <li key={`${item.criterion}-${index}`} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-800">{item.criterion}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">{item.source === "SCREENING_RESPONSE" ? "Candidate response" : "Resume"}</span>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${status.style}`}>{status.label}</span>
+                    </div>
+                  </div>
+                  {item.resumeEvidence ? (
+                    <blockquote className="mt-2 border-l-2 border-slate-200 pl-3 text-xs leading-5 text-slate-600">“{item.resumeEvidence}”</blockquote>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {application.analysisStrengths?.length || application.analysisImprovementTips?.length ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {application.analysisStrengths?.length ? (
+            <div className="rounded-lg bg-emerald-50/70 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-900">Evidence-backed strengths</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm leading-5 text-slate-700">
+                {application.analysisStrengths.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {application.analysisImprovementTips?.length ? (
+            <div className="rounded-lg bg-amber-50/70 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-amber-900">Resume evidence to strengthen</h3>
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-sm leading-5 text-slate-700">
+                {application.analysisImprovementTips.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <p className="text-[11px] leading-5 text-slate-500">AI analysis is limited to job-related evidence documented in the application. “Not found” means the resume did not clearly show that criterion; it is not proof that the candidate lacks it. Use this as a review aid, not an automatic decision.</p>
     </section>
   );
 }

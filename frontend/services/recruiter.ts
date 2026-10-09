@@ -16,6 +16,21 @@ export type RecruiterApplication = Application & {
   atsScore?: number;
   matchedSkills?: string[];
   missingSkills?: string[];
+  analysisSummary?: string;
+  analysisConfidence?: number;
+  analysisScoreBreakdown?: {
+    requiredSkills: number;
+    responsibilities: number;
+    relevantExperience: number;
+  };
+  analysisEvidence?: Array<{
+    criterion: string;
+    status: "SUPPORTED" | "PARTIAL" | "NOT_FOUND";
+    source: "RESUME" | "SCREENING_RESPONSE";
+    resumeEvidence: string;
+  }>;
+  analysisStrengths?: string[];
+  analysisImprovementTips?: string[];
   screeningAnswers?: Application["screeningAnswers"];
 };
 
