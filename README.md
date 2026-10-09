@@ -1,149 +1,139 @@
 # AI Hiring Platform
 
-An AWS-based hiring workflow with a Next.js frontend, TypeScript Lambda APIs, API Gateway, Cognito, S3, DynamoDB, and Terraform.
+An application that helps recruiters manage job applications and helps candidates understand how their resume matches a role.
 
-> **Project status:** the core API and UI are implemented in source, but the latest Terraform and Lambda bundles must still be applied to AWS and verified with real accounts.
+The platform gives recruiters useful information for review. It does not make hiring decisions or send emails automatically.
 
-## What is implemented
+## The problem
 
-- Terraform packages TypeScript Lambdas for jobs, applications, recruiter actions, dashboard, public jobs, invitation, application analysis, and post-confirmation tenant setup.
-- API Gateway defines the jobs, applications, resume upload/analysis, recruiter, dashboard, invitation, and public careers routes. The protected API role includes the Cognito `GetUser` permission required by access-token verification.
-- The recruiter resume URL route is checked before the generic applications route.
-- Self-service signup cannot grant a role or tenant. A Cognito post-confirmation trigger assigns each candidate a private tenant; recruiters are created only through the admin invitation route and Cognito recruiter group.
-- Public job identifiers, careers pages, and copy/LinkedIn/WhatsApp/email sharing links are present.
-- PDF.js extracts selectable PDF text in the candidate's browser; no Amazon Textract request is made for new uploads. Scanned/image-only PDFs are rejected with a clear message because OCR is intentionally not configured.
-- Standalone resume text is sent to the authenticated API and stored under the candidate's resume record in DynamoDB after the API verifies the candidate owns the uploaded S3 object. Job applications store the application, extracted text, and successful parse status atomically, then invoke job-specific analysis.
-- Application creation verifies the resume object, its metadata/ownership, its ID/key pairing, and duplicate applications. Recruiter review continues to use the saved application analysis.
-- Job-specific analysis claims a short DynamoDB lease and only analyzes applications without a saved score, preventing duplicate async triggers from making concurrent LLM calls.
-- AI analysis is generated from the saved application and job description, stored under `APPLICATION#{applicationId} / JOB#{jobId}#ANALYSIS#{timestamp}`, and included in the candidate's application tracker as a transparent report with score dimensions, evidence, strengths, gaps, and advice.
-- Recruiter applicants are ranked by match score, with earlier applications first for ties. Recruiters can review evidence and decide whether to advance or reject; the score never makes that decision automatically.
-- Recruiter interview and rejection messages are drafts that can be copied or opened in the recruiter's email app. The platform does not send them automatically.
-- Candidates can also upload a PDF and request a private, evidence-based resume review against a pasted job description through `/resume/analyze`. The report includes a weighted alignment score, requirement evidence, relevant strengths, skills not evidenced, constructive improvement tips, and an advisory apply-next-step; this one-off review is separate from a saved application review.
-- The standalone review reuses the latest saved result only when the effective resume text, job description, model, and prompt version match. It stores only a SHA-256 input key alongside the analysis record, not another copy of the resume text.
-- The standalone analyzer makes one structured request to the configured AI provider, caps the response size, and times out the provider call after 20 seconds. Development defaults to Groq; its free-tier access and quotas are controlled by Groq and can change. Production remains configured for xAI by default.
-- Analysis remains a single complete JSON response rather than SSE: the UI renders only validated, structured results and never presents partial JSON as a finished report.
-- New standalone resume reviews extract selectable text locally before submission; only older uploads may still be waiting on the legacy background parser and should be uploaded again to use browser extraction.
-- Application statuses include `APPLIED`, `PARSING`, `AI_REVIEWED`, `UNDER_REVIEW`, `SHORTLISTED`, `INTERVIEW_RECOMMENDED`, `INTERVIEW_SCHEDULED`, `OFFER`, `HIRED`, and `REJECTED`.
-- Job-specific application analysis is attached to the application for recruiter review; the recruiter controls all application-status decisions, and the AI score is not an automatic rejection or hiring decision.
-- Recruiter status changes are transition-checked and write audit records.
-- Recruiter candidate profiles resolve the candidate's private tenant only after proving that candidate applied to one of the recruiter's jobs.
+The resume workflow depended on Amazon Textract to read PDF files. This caused problems when Textract was unavailable or not enabled for the AWS account, and it could add service costs. Candidates also encountered analysis errors when the AI provider rejected a model, request format, or oversized response.
 
-## Still required before calling the workflow complete
+There was another gap in the hiring workflow: candidates needed a useful report about their application, while recruiters needed a consistent way to review and rank applicants without letting an AI score make the decision for them.
 
-- Apply the latest infrastructure. Until this is done, the deployed Lambda role may still lack `cognito-idp:GetUser`, which causes protected frontend requests to return `401` and appear as empty data.
-- Add a real malware-scan/completion record and gate application analysis on successful scanning. The current upload metadata has only a `PENDING_HOOK` placeholder.
-- Replace demo-mode fallbacks after the deployed routes have been verified.
-- Finish recruiter filtering, recommended-interview view, and audit-history display. Notes and pipeline changes exist, but these views need complete UX verification.
-- Finish candidate interview scheduling/offer messaging and a persistent candidate-facing resume-processing error view.
-- Add automated API/integration tests, then perform the required two-account end-to-end test: recruiter creates and shares a role; candidate signs up, uploads, applies; analysis completes; recruiter reviews and moves to interview; candidate sees the new status.
-- Deploy the updated API Lambdas and Terraform before testing. Terraform removes the S3-to-SQS and parser event mappings so new PDF uploads no longer invoke Textract.
-- After deployment, compare the `Resume analysis completed` CloudWatch durations across representative PDFs. Source changes alone do not establish a live before/after latency improvement.
+## Why I built it
 
-## Prerequisites
+I built this project to make resume review easier and clearer for both sides:
 
-- Node.js 20+, npm, Terraform 1.6+, and AWS CLI v2.
-- An authenticated AWS profile permitted to manage this stack.
-- An AI provider API key stored in AWS Secrets Manager after Terraform creates the secret. Development defaults to Groq's compatible endpoint and `openai/gpt-oss-120b`, a documented replacement for the retired `llama-3.3-70b-versatile`; provider access and quotas can change.
+- Candidates can apply to an open role and see an explanation of how their resume relates to its requirements.
+- Recruiters can review applicants in match-score order, inspect the supporting evidence, and choose the next step themselves.
+- New PDF uploads use browser-based text extraction instead of requiring Textract.
+- AI results are structured and advisory. They are not a hiring decision, and a missing resume detail does not prove a candidate lacks that skill.
 
-Never put AWS access keys, passwords, MFA codes, or AI keys in this repository or chat.
+## How it works
 
-## Development AI provider setup
+1. A recruiter creates and publishes a job with a description, requirements, skills, and optional screening questions.
+2. A candidate answers the job-related questions, uploads a PDF resume, and applies.
+3. The candidate's browser uses PDF.js to read selectable text from the PDF. The resume file is uploaded to secure AWS storage, and the application is saved through the API.
+4. The backend sends the resume text and job details to the configured AI provider for a structured comparison. The result is saved with the application.
+5. The candidate can see a report with the match score, score dimensions, strengths, gaps, and evidence.
+6. The recruiter sees applicants ranked by score, with earlier applications first when scores are tied. The recruiter reviews the evidence and manually advances or rejects each application.
+7. Recruiters can copy or open an email draft. The platform does not send the email.
 
-The development environment is configured for Groq, not xAI. Create a new Groq API key and save it in AWS Secrets Manager in the existing secret `ai-hiring-platform/dev/xai-api` (the secret has a legacy name). Store it as JSON:
+The score is only one review signal. Recruiters make the final decision.
 
-```json
-{"GROQ_API_KEY":"<your-new-groq-key>"}
+## My approach
+
+- **Avoid a dependency on Textract for new PDF uploads:** extract selectable PDF text in the browser with PDF.js, then send the text through the authenticated API.
+- **Keep application data in the backend:** store resumes in S3 and application and analysis data in DynamoDB. The backend checks that the uploaded resume belongs to the candidate.
+- **Compare a resume with the specific role:** send the resume text and job description together to the AI provider, then validate and save a structured report.
+- **Make failures understandable:** use clear errors for unreadable PDFs and AI provider problems rather than showing partial or invalid analysis as a finished report.
+- **Keep people in control:** show evidence and an advisory score, rank applicants consistently, and leave status changes and email sending to the recruiter.
+- **Protect credentials:** keep AI provider keys in AWS Secrets Manager and do not commit keys, passwords, or personal environment files.
+
+## Main technologies
+
+- **Frontend:** Next.js, React, TypeScript, PDF.js
+- **Backend:** TypeScript AWS Lambda functions and API Gateway
+- **Authentication:** Amazon Cognito
+- **Storage:** Amazon S3 and DynamoDB
+- **Infrastructure:** Terraform
+- **AI analysis:** OpenAI-compatible provider configuration; the development Terraform example uses Groq
+
+Scanned or image-only PDFs are not supported by the browser text-extraction flow because OCR is not configured. The AI provider may have its own usage limits or costs.
+
+## Run the frontend locally
+
+The frontend connects to the configured AWS API. Starting it locally does not start AWS Lambda functions or create a local backend.
+
+Requirements: Node.js 20 or newer and npm.
+
+In Git Bash:
+
+```bash
+cd ~/Desktop/Ai-Hiring-Platform/frontend
+npm ci
 ```
 
-Do not put the key in source code, Terraform variables, or chat. Groq may enforce free-tier rate limits or change model availability; the application will display a useful message if a key is rejected or a quota is reached.
+Create `frontend/.env.local` from `frontend/.env.example`. Fill in the API Gateway and Cognito values for your AWS environment. Do not commit `.env.local`.
 
-## Local builds
+Start the development website:
 
-```powershell
-cd backend
-npm ci
-LENOVO@Alex MINGW64 ~/Desktop/Ai-Hiring-Platform/frontend (main)
-$ npm run build
-
-> frontend@0.1.0 build
-> next build
-
-▲ Next.js 16.2.6 (Turbopack)
-- Environments: .env.local, .env
-
-  Creating an optimized production build ...
-✓ Compiled successfully in 118s
-  Running TypeScript  .Failed to type check.
-
-.next/dev/types/validator.ts:62:1
-Type error: Cannot find name 'eck'.
-
-  60 |   type __Unused = __Check
-  61 | }
-> 62 | eck = __IsExpected<typeof handler>
-     | ^
-  63 |   // @ts-ignore
-  64 |   type __Unused = __Check
-  65 | }
-Next.js build worker exited with code: 1 and signal: null
-npm notice
-npm notice New major version of npm available! 10.8.2 -> 12.2.0
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
-npm notice To update run: npm install -g npm@12.2.0
-npm notice
-cd ../frontend
-npm ci
-npm run build
+```bash
 npm run dev
 ```
 
-The backend build creates `backend/.lambda-dist/*`. Terraform packages these artifacts, so rebuild the backend immediately before Terraform plan/apply.
+Open [http://localhost:3000](http://localhost:3000). Keep the terminal open while using the site. Press `Ctrl+C` to stop the development server.
 
-After a successful apply, sign out and sign in again. Existing tokens do not gain new Cognito attributes or group claims until they are refreshed. The protected resume-analysis endpoint needs both a valid Cognito ID token in `Authorization` and access token in `X-Cognito-Access-Token`; the deployed analysis Lambda role must also include `cognito-idp:GetUser`.
+## Deploy backend changes to AWS
 
-## AWS deployment
+Deploy only when you have permission to change the AWS development environment. Terraform can create or modify billable resources.
 
-Authenticate locally with your AWS profile:
+First build the Lambda bundles:
 
-```powershell
-aws configure sso
-aws sts get-caller-identity --profile <your-profile>
+```bash
+cd ~/Desktop/Ai-Hiring-Platform/backend
+npm ci
+npm run build
 ```
 
-Then deploy the development environment:
+Sign in with an AWS profile that is allowed to deploy this project:
 
-```powershell
-cd infrastructure/terraform/environments/dev
+```bash
+aws sso login --profile YOUR_PROFILE
+aws sts get-caller-identity --profile YOUR_PROFILE
+export AWS_PROFILE=YOUR_PROFILE
+```
+
+Replace `YOUR_PROFILE` with your AWS profile name. Then plan the development deployment:
+
+```bash
+cd ~/Desktop/Ai-Hiring-Platform/infrastructure/terraform/environments/dev
 terraform init -backend-config=backend.hcl
 terraform plan -out=tfplan
+terraform show -no-color tfplan
+```
+
+Read the plan before applying it. Stop if it contains unexpected changes or resource deletions. If the plan is expected and you are ready to deploy:
+
+```bash
 terraform apply tfplan
 terraform output
 ```
 
-Review the plan before applying: deployment creates billable AWS resources. `backend.hcl` points to the remote Terraform state.
+The development AI key must be stored in AWS Secrets Manager. Never paste it into source files, Git, or chat. After deployment, sign out and back in to refresh your login session. Rebuild/restart the frontend if its API or Cognito settings changed.
 
-After Terraform creates the secret, set its value in the AWS Secrets Manager console as described in [Development AI provider setup](#development-ai-provider-setup). For dev, use a `GROQ_API_KEY` JSON property; production remains configured for xAI by default.
+## Test the workflow
 
-## Frontend configuration
+1. Sign in as a recruiter and publish a job.
+2. Open the job as a candidate, answer its questions, upload a text-readable PDF, and submit the application.
+3. Open **My Applications** and wait for the analysis to complete. Refresh if needed, then expand **Your review report**.
+4. Sign in as a recruiter and open the job's applicants. Review scores and evidence, then manually choose whether to advance or reject an applicant.
+5. If useful, copy or open an email draft and review it before sending it yourself.
 
-Create `frontend/.env.local` from `frontend/.env.example`, using Terraform outputs:
+Use separate browser profiles or a private window to test recruiter and candidate accounts at the same time.
 
-```env
-NEXT_PUBLIC_API_BASE_URL=<api_gateway_invoke_url>
-NEXT_PUBLIC_API_GATEWAY_ID=<api_gateway_id>
-NEXT_PUBLIC_API_STAGE=dev
-NEXT_PUBLIC_COGNITO_USER_POOL_ID=<cognito_user_pool_id>
-NEXT_PUBLIC_COGNITO_CLIENT_ID=<cognito_web_client_id>
-NEXT_PUBLIC_AWS_REGION=ap-south-1
-```
-
-## Repository map
+## Project folders
 
 ```text
-frontend/        Next.js UI and browser API clients
-backend/         TypeScript Lambda handlers and shared middleware
-infrastructure/  Terraform environments and foundation module
-docs/            Architecture and operating documentation
+frontend/        Next.js website
+backend/         TypeScript Lambda handlers and build scripts
+infrastructure/  Terraform configuration for AWS
+docs/            Architecture and deployment notes
 ```
 
-See [the deployment runbook](docs/DEPLOYMENT_RUNBOOK.md), [the project structure](docs/PROJECT_STRUCTURE.md), and [the DynamoDB model](docs/DYNAMODB_SINGLE_TABLE.md).
+## Important notes
+
+- Changes in GitHub do not deploy the application. Deploy backend and infrastructure changes with Terraform, and use a frontend hosting deployment for a public website.
+- Check AWS, AI provider, and Terraform costs before deployment.
+- Do not commit Terraform plan files, generated `frontend/.next` output, `.env.local`, or secrets.
+- A successful local build does not prove that AWS is configured correctly. Verify the deployed workflow with separate recruiter and candidate accounts.
