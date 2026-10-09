@@ -50,6 +50,29 @@ export type Application = {
   createdAt: string;
   updatedAt: string;
   processingError?: string;
+  atsScore?: number;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  summary?: string;
+  confidence?: number;
+  scoreBreakdown?: {
+    requiredSkills: number;
+    responsibilities: number;
+    relevantExperience: number;
+  };
+  evidence?: Array<{
+    criterion: string;
+    status: "SUPPORTED" | "PARTIAL" | "NOT_FOUND";
+    source: "RESUME" | "SCREENING_RESPONSE";
+    resumeEvidence: string;
+  }>;
+  strengths?: string[];
+  improvementTips?: string[];
+  analyzedAt?: string;
+  applicationRecommendation?: {
+    label: "Consider applying" | "Good evidence to discuss" | "Review your evidence first";
+    rationale: string;
+  };
 };
 
 export type CreateApplicationInput = {

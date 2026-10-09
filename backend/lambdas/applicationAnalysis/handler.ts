@@ -74,6 +74,14 @@ type NormalizedAnalysis = {
   improvementTips: string[];
 };
 
+type ApplicationRecommendation = {
+  label:
+    | "Consider applying"
+    | "Good evidence to discuss"
+    | "Review your evidence first";
+  rationale: string;
+};
+
 const SCORE_WEIGHTS = {
   requiredSkills: 0.5,
   responsibilities: 0.3,
@@ -291,6 +299,28 @@ function normalizeAnalysis(
     evidence: normalizeEvidence(analysis.evidence),
     strengths: normalizeStringList(analysis.strengths, 8),
     improvementTips: normalizeStringList(analysis.improvementTips, 8),
+  };
+}
+
+function buildApplicationRecommendation(
+  analysis: NormalizedAnalysis
+): ApplicationRecommendation {
+  const hasRequiredSkillEvidence =
+    (analysis.scoreBreakdown?.requiredSkills ?? 0) >= 60 &&
+    analysis.matchedSkills.length > 0;
+
+  if (analysis.atsScore >= 65 && hasRequiredSkillEvidence) {
+    return {
+      label: "Good evidence to discuss",
+      rationale:
+        "Your resume documents evidence for several key requirements. Review the remaining gaps and prepare to discuss your relevant experience accurately.",
+    };
+  }
+
+  return {
+    label: "Review your evidence first",
+    rationale:
+      "Some role requirements are not clearly evidenced in the resume. Review the criteria and strengthen how relevant experience is documented, if accurate.",
   };
 }
 
@@ -747,6 +777,8 @@ export const main: Handler<
       jobText,
       screeningResponseText
     );
+  const applicationRecommendation =
+    buildApplicationRecommendation(normalized);
 
   const now =
     new Date().toISOString();
@@ -807,6 +839,8 @@ export const main: Handler<
 
         improvementTips:
           normalized.improvementTips,
+
+        applicationRecommendation,
       },
     })
   );
@@ -840,6 +874,7 @@ export const main: Handler<
           evidence = :evidence,
           strengths = :strengths,
           improvementTips = :improvementTips,
+          applicationRecommendation = :applicationRecommendation,
           analyzedAt = :now,
           modelId = :modelId,
           GSI1SK = :gsi1sk
@@ -885,6 +920,9 @@ export const main: Handler<
         ":improvementTips":
           normalized.improvementTips,
 
+        ":applicationRecommendation":
+          applicationRecommendation,
+
         ":modelId":
           model,
 
@@ -907,5 +945,6 @@ export const main: Handler<
   return {
     applicationId,
     ...normalized,
+    applicationRecommendation,
   };
 };

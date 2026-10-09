@@ -1,18 +1,5 @@
 import type { RecruiterApplication } from "@/services/recruiter";
 
-const statusWeight: Record<RecruiterApplication["status"], number> = {
-  HIRED: 9,
-  OFFER: 8,
-  INTERVIEW_SCHEDULED: 7,
-  INTERVIEW_RECOMMENDED: 6,
-  SHORTLISTED: 5,
-  UNDER_REVIEW: 4,
-  AI_REVIEWED: 3,
-  APPLIED: 2,
-  PARSING: 1,
-  REJECTED: 0,
-};
-
 export function compareApplications(
   left: RecruiterApplication,
   right: RecruiterApplication
@@ -24,13 +11,12 @@ export function compareApplications(
     return rightScore - leftScore;
   }
 
-  const leftWeight = statusWeight[left.status];
-  const rightWeight = statusWeight[right.status];
-  if (leftWeight !== rightWeight) {
-    return rightWeight - leftWeight;
+  const applicationDateOrder = Date.parse(left.createdAt) - Date.parse(right.createdAt);
+  if (Number.isFinite(applicationDateOrder) && applicationDateOrder !== 0) {
+    return applicationDateOrder;
   }
 
-  return Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+  return left.applicationId.localeCompare(right.applicationId);
 }
 
 export function getScreeningLabel(application: RecruiterApplication): string {

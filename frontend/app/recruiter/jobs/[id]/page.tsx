@@ -93,18 +93,37 @@ function getReviewRecommendation(application: RecruiterApplication) {
   };
 }
 
-function candidateEmailUrl(application: RecruiterApplication, jobTitle?: string): string | null {
+function candidateEmailDraft(application: RecruiterApplication, jobTitle?: string): {
+  to: string;
+  subject: string;
+  body: string;
+  url: string;
+  label: string;
+} | null {
   if (!application.candidateEmail) return null;
 
   const candidateName = application.candidateEmail.split("@")[0].replace(/[._-]/g, " ");
   const role = jobTitle ?? "the role";
   const declined = application.status === "REJECTED";
-  const subject = declined ? `Update on your ${role} application` : `Next steps for your ${role} application`;
+  const interview = application.status === "INTERVIEW_RECOMMENDED" || application.status === "INTERVIEW_SCHEDULED";
+  const subject = declined
+    ? `Update on your ${role} application`
+    : interview
+      ? `Interview next steps for ${role}`
+      : `Next steps for your ${role} application`;
   const body = declined
     ? `Hello ${candidateName},\n\nThank you for the time and effort you invested in applying for ${role}. After careful consideration, we will not be progressing your application at this time.\n\nWe appreciate your interest and wish you every success in your search.\n\nBest regards,\nRecruiting Team`
-    : `Hello ${candidateName},\n\nThank you for your interest in ${role}. We reviewed your application and would like to discuss the next step with you.\n\nPlease reply with your availability for a brief conversation and any questions you may have.\n\nBest regards,\nRecruiting Team`;
+    : interview
+      ? `Hello ${candidateName},\n\nThank you for your interest in the ${role} position. We have reviewed your application and would like to invite you to the next interview stage.\n\nPlease reply with a few times that work for you, along with your time zone. We will confirm the interview format and details.\n\nBest regards,\nRecruiting Team`
+      : `Hello ${candidateName},\n\nThank you for your interest in ${role}. We are reviewing your application and will share an update about next steps as soon as we can.\n\nBest regards,\nRecruiting Team`;
 
-  return `mailto:${encodeURIComponent(application.candidateEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  return {
+    to: application.candidateEmail,
+    subject,
+    body,
+    url: `mailto:${encodeURIComponent(application.candidateEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+    label: declined ? "Draft rejection email" : interview ? "Draft interview email" : "Draft update email",
+  };
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -122,6 +141,7 @@ export default function RecruiterJobApplicantsPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -167,6 +187,21 @@ export default function RecruiterJobApplicantsPage() {
       setError(getErrorMessage(downloadError, "Unable to open resume."));
     } finally {
       setDownloadingId(null);
+    }
+  };
+
+  const onCopyEmailDraft = async (
+    applicationId: string,
+    draft: NonNullable<ReturnType<typeof candidateEmailDraft>>
+  ) => {
+    setError(null);
+    try {
+      await navigator.clipboard.writeText(
+        `To: ${draft.to}\nSubject: ${draft.subject}\n\n${draft.body}`
+      );
+      setCopiedDraftId(applicationId);
+    } catch {
+      setError("Could not copy the email draft. Use Open email draft to review it in your email app.");
     }
   };
 
@@ -339,7 +374,9 @@ export default function RecruiterJobApplicantsPage() {
           </div>
         ) : ranked.length ? (
           <div className="space-y-4">
-            {ranked.map((application, index) => (
+            {ranked.map((application, index) => {
+              const emailDraft = candidateEmailDraft(application, job?.title);
+              return (
               <article
                 key={application.applicationId}
                 className="rounded-2xl border border-slate-200 bg-white p-5"
@@ -482,19 +519,29 @@ export default function RecruiterJobApplicantsPage() {
                         onClick={() => void onStatus(application, "REJECTED")}
                       />
                     ) : null}
-                    {candidateEmailUrl(application, job?.title) ? (
-                      <a
-                        href={candidateEmailUrl(application, job?.title) ?? undefined}
-                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        <Mail className="h-3.5 w-3.5" />
-                        {application.status === "REJECTED" ? "Prepare decline email" : "Prepare candidate email"}
-                      </a>
+                    {emailDraft ? (
+                      <>
+                        <ActionButton
+                          label={copiedDraftId === application.applicationId ? "Email draft copied" : "Copy email draft"}
+                          icon={Copy}
+                          disabled={false}
+                          className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          onClick={() => void onCopyEmailDraft(application.applicationId, emailDraft)}
+                        />
+                        <a
+                          href={emailDraft.url}
+                          className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Mail className="h-3.5 w-3.5" />
+                          Open email draft
+                        </a>
+                      </>
                     ) : null}
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
