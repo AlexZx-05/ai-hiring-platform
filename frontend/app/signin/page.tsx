@@ -10,6 +10,7 @@ import {
   signOut,
 } from "aws-amplify/auth";
 import {
+  ArrowRight,
   BarChart3,
   BriefcaseBusiness,
   Eye,
@@ -22,10 +23,8 @@ import {
 } from "lucide-react";
 import { configureAmplifyAuth } from "@/lib/amplify";
 import {
-  demoLoginEnabled,
   getUserRoleFromIdToken,
   persistAuthArtifacts,
-  startDemoSession,
 } from "@/services/auth";
 
 type Role = "candidate" | "recruiter";
@@ -203,17 +202,16 @@ export default function SignInPage() {
     }
   };
 
-  const handleDemoLogin = (role: Role) => {
-    startDemoSession(role);
-    window.location.replace(destinationForRole(role));
-  };
-
   return (
-    <div className="flex min-h-screen">
-      <section className="relative hidden w-[42%] flex-col overflow-hidden bg-[#0f1c2e] p-10 lg:flex">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="z-10 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-700">
+    <main className="min-h-screen bg-[#f4f7fb] text-slate-900 lg:grid lg:grid-cols-[minmax(0,0.92fr)_minmax(520px,1.08fr)]">
+      <section className="relative hidden min-h-screen flex-col overflow-hidden bg-[#08152b] p-10 text-white lg:flex xl:p-14">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-32 top-20 h-96 w-96 rounded-full bg-blue-600/20 blur-[110px]" />
+          <div className="absolute -right-40 bottom-0 h-[30rem] w-[30rem] rounded-full bg-cyan-400/10 blur-[120px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:52px_52px] [mask-image:linear-gradient(to_bottom,black,transparent_90%)]" />
+        </div>
+        <div className="relative z-10 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-300 via-blue-500 to-indigo-600 shadow-lg shadow-blue-950/50">
             <BriefcaseBusiness className="h-5 w-5 text-white" />
           </div>
           <div>
@@ -226,19 +224,19 @@ export default function SignInPage() {
           </div>
         </div>
 
-        <div className="z-10 flex flex-1 flex-col justify-center py-8">
-          <span className="mb-6 inline-flex w-fit items-center gap-1.5 rounded-full border border-blue-400/25 bg-blue-500/15 px-3 py-1.5 text-[11px] text-blue-400">
+        <div className="relative z-10 flex flex-1 flex-col justify-center py-10">
+          <span className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-blue-300/20 bg-blue-400/[0.08] px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-200">
             <Sparkles className="h-3.5 w-3.5" />
             {content.eyebrow}
           </span>
-          <h1 className="mb-4 max-w-lg text-[2rem] font-bold leading-tight text-white">
+          <h1 className="mb-4 max-w-lg text-4xl font-semibold leading-[1.08] tracking-[-0.04em] text-white xl:text-5xl">
             {content.hero}
           </h1>
-          <p className="mb-10 max-w-xl text-sm leading-relaxed text-slate-400">
+          <p className="mb-9 max-w-xl text-base leading-7 text-slate-300/80">
             {content.body}
           </p>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-3">
             <FeatureCard
               icon={UsersRound}
               title="Role Matching"
@@ -255,26 +253,43 @@ export default function SignInPage() {
               desc="Move work through every stage."
             />
           </div>
+          <p className="mt-10 flex items-center gap-2 text-xs text-slate-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            AI-assisted insights. Human-led decisions.
+          </p>
         </div>
+        <p className="relative z-10 text-xs text-slate-500">© {new Date().getFullYear()} TalentFlow AI</p>
       </section>
 
-      <section className="flex flex-1 items-center justify-center bg-white px-8 py-12">
-        <div className="w-full max-w-sm">
-          <h2 className="mb-1 text-2xl font-bold text-gray-900">
+      <section className="flex min-h-screen flex-1 items-center justify-center px-5 py-8 sm:px-8 lg:px-12 xl:px-16">
+        <div className="w-full max-w-[440px]">
+          <Link href="/" aria-label="TalentFlow AI home" className="mb-9 flex w-fit items-center gap-3 lg:hidden">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-300 via-blue-500 to-indigo-600 shadow-md shadow-blue-900/20">
+              <BriefcaseBusiness className="h-[18px] w-[18px] text-white" />
+            </span>
+            <span>
+              <span className="block text-sm font-bold text-slate-900">TalentFlow AI</span>
+              <span className="block text-[11px] text-slate-500">Hiring Intelligence Platform</span>
+            </span>
+          </Link>
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:p-9">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Secure workspace access</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
             Welcome back
           </h2>
-          <p className="mb-6 text-sm text-gray-500">{content.description}</p>
+          <p className="mb-6 mt-2 text-sm leading-6 text-slate-500">{content.description}</p>
 
-          <div className="mb-6 grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+          <div role="group" aria-label="Choose workspace" className="mb-6 grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1.5">
             {(["recruiter", "candidate"] as Role[]).map((role) => (
               <button
                 key={role}
                 type="button"
                 onClick={() => setSelectedRole(role)}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                aria-pressed={selectedRole === role}
+                className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                   selectedRole === role
-                    ? "bg-white text-gray-950 shadow-sm"
-                    : "text-gray-500 hover:text-gray-900"
+                    ? "bg-white text-slate-950 shadow-sm"
+                    : "text-slate-500 hover:text-slate-900"
                 }`}
               >
                 {role === "recruiter" ? "Recruiter" : "Candidate"}
@@ -282,69 +297,49 @@ export default function SignInPage() {
             ))}
           </div>
 
-          {demoLoginEnabled ? (
-            <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-3">
-              <p className="text-xs font-semibold text-blue-950">Explore with sample data</p>
-              <p className="mt-1 text-[11px] leading-4 text-blue-800">
-                Development-only access. No Cognito account or password is required.
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDemoLogin("candidate")}
-                  className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-                >
-                  Demo candidate
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoLogin("recruiter")}
-                  className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800"
-                >
-                  Demo recruiter
-                </button>
-              </div>
-            </div>
-          ) : null}
-
           {errors.general && (
-            <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {errors.general}
             </div>
           )}
 
           <div className="mb-4">
-            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+            <label htmlFor="signin-email" className="mb-2 block text-xs font-semibold text-slate-700">
               Email
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                id="signin-email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(event) => {
                   setEmail(event.target.value);
                   setErrors((previous) => ({ ...previous, email: undefined }));
                 }}
                 placeholder="name@company.com"
-                className={`w-full rounded-lg border bg-white py-2.5 pl-9 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/30 ${
-                  errors.email ? "border-red-400" : "border-gray-200"
+                aria-invalid={Boolean(errors.email)}
+                className={`w-full rounded-xl border bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${
+                  errors.email ? "border-rose-400" : "border-slate-200"
                 }`}
               />
             </div>
             {errors.email && (
-              <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>
+              <p className="mt-1.5 text-xs text-rose-600">{errors.email}</p>
             )}
           </div>
 
           <div className="mb-4">
-            <label className="mb-1.5 block text-xs font-medium text-gray-600">
+            <label htmlFor="signin-password" className="mb-2 block text-xs font-semibold text-slate-700">
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                id="signin-password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => {
                   setPassword(event.target.value);
@@ -355,14 +350,15 @@ export default function SignInPage() {
                 }}
                 onKeyDown={(event) => event.key === "Enter" && handleLogin()}
                 placeholder="Enter your password"
-                className={`w-full rounded-lg border bg-white py-2.5 pl-9 pr-10 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/30 ${
-                  errors.password ? "border-red-400" : "border-gray-200"
+                aria-invalid={Boolean(errors.password)}
+                className={`w-full rounded-xl border bg-white py-3 pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 ${
+                  errors.password ? "border-rose-400" : "border-slate-200"
                 }`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 transition hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
@@ -373,23 +369,23 @@ export default function SignInPage() {
               </button>
             </div>
             {errors.password && (
-              <p className="mt-1 text-[11px] text-red-500">{errors.password}</p>
+              <p className="mt-1.5 text-xs text-rose-600">{errors.password}</p>
             )}
           </div>
 
-          <div className="mb-5 flex items-center justify-between">
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+          <div className="mb-6 flex items-center justify-between">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
               <input
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(event) => setRememberMe(event.target.checked)}
-                className="h-3.5 w-3.5 cursor-pointer accent-blue-600"
+                className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-blue-600 focus:ring-blue-500"
               />
               Remember Me
             </label>
             <Link
               href="/forgot-password"
-              className="text-xs font-medium text-blue-600 hover:underline"
+              className="text-xs font-semibold text-blue-700 hover:text-blue-800 hover:underline"
             >
               Forgot Password?
             </Link>
@@ -399,39 +395,44 @@ export default function SignInPage() {
             type="button"
             onClick={handleLogin}
             disabled={isLoading}
-            className="mb-4 w-full rounded-lg bg-gray-900 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-60"
+            className="group mb-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-700/15 transition hover:bg-blue-800 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isLoading ? "Signing in..." : content.submit}
+            {!isLoading ? <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" /> : null}
           </button>
 
-          <div className="mb-4 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-[11px] text-gray-400">OR</span>
-            <div className="h-px flex-1 bg-gray-200" />
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Or continue with</span>
+            <div className="h-px flex-1 bg-slate-200" />
           </div>
 
           <button
             type="button"
             onClick={handleCognitoSSO}
             disabled={isCognitoRedirecting}
-            className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-200 py-2.5 text-sm text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <BriefcaseBusiness className="h-4 w-4 text-blue-500" />
+            <BriefcaseBusiness className="h-4 w-4 text-blue-700" />
             {isCognitoRedirecting ? "Redirecting..." : "Continue with AWS Cognito"}
           </button>
 
-          <p className="text-center text-xs text-gray-500">
+          <p className="mt-6 text-center text-xs text-slate-500">
             Don&apos;t have an account?{" "}
             <Link
               href={`/signup?role=${selectedRole}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`}
-              className="font-medium text-blue-600 hover:underline"
+              className="font-semibold text-blue-700 hover:text-blue-800 hover:underline"
             >
-              Sign Up
+              Sign up
             </Link>
+          </p>
+          </div>
+          <p className="mt-5 text-center text-[11px] text-slate-400">
+            Protected sign-in powered by AWS Cognito
           </p>
         </div>
       </section>
-    </div>
+    </main>
   );
 }
 
