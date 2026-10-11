@@ -86,6 +86,34 @@ export async function createRecruiterJob(payload: CreateJobInput): Promise<Job> 
   return response.data.job;
 }
 
+export async function updateRecruiterJob(
+  jobId: string,
+  payload: Omit<CreateJobInput, "status">
+): Promise<Job> {
+  if (getDemoSession()) {
+    throw new Error("Job editing is unavailable in demo mode.");
+  }
+  const response = await api.patch<{ job: Job }>(
+    `/jobs/${encodeURIComponent(jobId)}`,
+    payload
+  );
+  return response.data.job;
+}
+
+export async function updateRecruiterJobStatus(
+  jobId: string,
+  status: Job["status"]
+): Promise<Job> {
+  if (getDemoSession()) {
+    throw new Error("Job status updates are unavailable in demo mode.");
+  }
+  const response = await api.patch<{ job: Job }>(
+    `/jobs/${encodeURIComponent(jobId)}/status`,
+    { status }
+  );
+  return response.data.job;
+}
+
 export async function listJobApplications(
   jobId: string
 ): Promise<RecruiterApplication[]> {

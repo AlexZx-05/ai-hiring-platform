@@ -47,6 +47,7 @@ export type JobRecord = {
   postedBy: string;
   createdAt: string;
   updatedAt: string;
+  criteriaUpdatedAt?: string;
   GSI1PK: string;
   GSI1SK: string;
   GSI2PK: string;
@@ -82,6 +83,8 @@ export type ApplicationRecord = {
   coverNote?: string;
   screeningAnswers: ApplicationScreeningAnswer[];
   status: ApplicationStatus;
+  analyzedAt?: string;
+  analyzedCriteriaUpdatedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   GSI1PK: string;

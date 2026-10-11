@@ -136,7 +136,7 @@ export default function SignupPage() {
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-white">
-              TalentFlow AI
+              HireAI
             </p>
             <p className="text-[11px] text-slate-400">
               Hiring Intelligence Platform
@@ -186,7 +186,7 @@ export default function SignupPage() {
             </h2>
             <p className="mt-2 text-sm text-gray-500">
               {step === "signup"
-                ? "Choose your role and set up secure access to TalentFlow AI."
+                ? "Choose your role and set up secure access to HireAI."
                 : "Enter the verification code sent to your email."}
             </p>
           </div>
@@ -319,7 +319,7 @@ export default function SignupPage() {
             Already have an account?{" "}
             <Link
               className="font-semibold text-blue-600 hover:underline"
-              href="/signin"
+              href="/login"
             >
               Sign In
             </Link>

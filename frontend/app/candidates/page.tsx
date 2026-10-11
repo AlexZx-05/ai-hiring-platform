@@ -8,6 +8,7 @@ import {
   Sparkles,
   UserCheck,
   Users,
+  XCircle,
 } from "lucide-react";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 import {
@@ -15,34 +16,23 @@ import {
   listRecruiterJobs,
   type RecruiterApplication,
 } from "@/services/recruiter";
-import { compareApplications, getMatchStrength, getScreeningLabel } from "@/lib/screening";
+import type { Job } from "@/services/jobs";
+import { isSelectedForNextStage } from "@/lib/screening";
 
-type CandidateLeaderboardEntry = RecruiterApplication & {
-  jobTitle: string;
-};
-
-const statusStyle: Record<RecruiterApplication["status"], string> = {
-  APPLIED: "bg-blue-50 text-blue-700",
-  PARSING: "bg-amber-50 text-amber-700",
-  AI_REVIEWED: "bg-cyan-50 text-cyan-700",
-  UNDER_REVIEW: "bg-indigo-50 text-indigo-700",
-  SHORTLISTED: "bg-green-50 text-green-700",
-  INTERVIEW_RECOMMENDED: "bg-violet-50 text-violet-700",
-  INTERVIEW_SCHEDULED: "bg-violet-50 text-violet-700",
-  OFFER: "bg-emerald-50 text-emerald-700",
-  HIRED: "bg-emerald-100 text-emerald-800",
-  REJECTED: "bg-rose-50 text-rose-700",
+type JobApplicantGroup = {
+  job: Job;
+  applications: RecruiterApplication[];
 };
 
 function getErrorMessage(error: unknown): string {
   return (
     (error as { response?: { data?: { message?: string } } })?.response?.data
-      ?.message ?? "Unable to load candidates."
+      ?.message ?? "Unable to load jobs and applicants."
   );
 }
 
 export default function CandidatesPage() {
-  const [entries, setEntries] = useState<CandidateLeaderboardEntry[]>([]);
+  const [groups, setGroups] = useState<JobApplicantGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -55,28 +45,21 @@ export default function CandidatesPage() {
       setError(null);
       try {
         const jobs = await listRecruiterJobs();
-        const applicationSets = await Promise.all(
-          jobs.map(async (job) => {
-            const applications = await listJobApplications(job.jobId);
-            return applications.map((application) => ({
-              ...application,
-              jobTitle: job.title,
-            }));
-          })
+        const loadedGroups = await Promise.all(
+          jobs.map(async (job) => ({
+            job,
+            applications: await listJobApplications(job.jobId),
+          }))
         );
 
-        if (!active) {
-          return;
+        if (active) {
+          setGroups(loadedGroups);
         }
-
-        setEntries(applicationSets.flat().sort(compareApplications));
       } catch (loadError) {
-        if (!active) {
-          return;
+        if (active) {
+          setError(getErrorMessage(loadError));
+          setGroups([]);
         }
-
-        setError(getErrorMessage(loadError));
-        setEntries([]);
       } finally {
         if (active) {
           setLoading(false);
@@ -85,70 +68,78 @@ export default function CandidatesPage() {
     };
 
     void load();
-
     return () => {
       active = false;
     };
   }, []);
 
-  const filteredEntries = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) {
-      return entries;
-    }
+  const allApplications = useMemo(
+    () => groups.flatMap(({ applications }) => applications),
+    [groups]
+  );
 
-    return entries.filter((entry) =>
+  const filteredGroups = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return groups;
+
+    return groups.filter(({ job, applications }) =>
       [
-        entry.candidateEmail,
-        entry.candidateId,
-        entry.jobTitle,
-        ...(entry.matchedSkills ?? []),
-        ...(entry.missingSkills ?? []),
+        job.title,
+        job.department,
+        job.location,
+        ...applications.flatMap((application) => [
+          application.candidateEmail,
+          application.candidateId,
+          ...(application.matchedSkills ?? []),
+          ...(application.missingSkills ?? []),
+        ]),
       ]
         .join(" ")
         .toLowerCase()
         .includes(normalized)
     );
-  }, [entries, query]);
+  }, [groups, query]);
 
-  const summary = useMemo(() => {
-    const scored = entries.filter((entry) => typeof entry.atsScore === "number");
-
-    return {
-      totalCandidates: new Set(entries.map((entry) => entry.candidateId)).size,
-      shortlisted: entries.filter((entry) => entry.status === "SHORTLISTED").length,
-      awaitingAi: entries.filter((entry) => typeof entry.atsScore !== "number").length,
-      averageScore: scored.length
-        ? Math.round(
-            scored.reduce((sum, entry) => sum + (entry.atsScore ?? 0), 0) / scored.length
-          )
-        : null,
-    };
-  }, [entries]);
+  const scoredApplications = allApplications.filter(
+    (application) => typeof application.atsScore === "number"
+  );
+  const summary = {
+    totalCandidates: new Set(allApplications.map((application) => application.candidateId)).size,
+    selected: allApplications.filter(isSelectedForNextStage).length,
+    rejected: allApplications.filter((application) => application.status === "REJECTED").length,
+    awaitingAi: allApplications.filter((application) => typeof application.atsScore !== "number").length,
+    averageScore: scoredApplications.length
+      ? Math.round(
+          scoredApplications.reduce((sum, application) => sum + (application.atsScore ?? 0), 0) /
+            scoredApplications.length
+        )
+      : null,
+  };
 
   return (
     <WorkspaceShell
       title="Candidate directory"
-      subtitle="Review every applicant across your organization’s jobs from one workspace."
+      subtitle="Choose a job to review its applicants, shortlist, and rejections."
       actions={
         <label className="relative block w-56 sm:w-80">
-          <span className="sr-only">Search candidates</span>
+          <span className="sr-only">Search jobs or applicants</span>
           <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Candidate, job, or skill"
+            placeholder="Job, candidate, or skill"
             className="h-10 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           />
         </label>
       }
     >
       <section className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <SummaryCard label="Unique candidates" value={summary.totalCandidates} icon={Users} />
-          <SummaryCard label="Shortlisted profiles" value={summary.shortlisted} icon={UserCheck} />
+          <SummaryCard label="Selected / advanced" value={summary.selected} icon={UserCheck} />
+          <SummaryCard label="Rejected" value={summary.rejected} icon={XCircle} />
           <SummaryCard
-            label="Avg. AI score"
+            label="Average AI score"
             value={summary.averageScore === null ? "Pending" : `${summary.averageScore}%`}
             icon={Sparkles}
           />
@@ -156,84 +147,64 @@ export default function CandidatesPage() {
         </div>
 
         {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
           </div>
         ) : null}
 
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-5 py-4">
-            <h2 className="text-sm font-semibold text-slate-900">Candidate leaderboard</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Jobs and applicant status</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Candidates are ordered by AI score when available, then by recruiter stage and most recent activity.
+              Select a job to review every applicant, view their evidence, and prepare recruiter-approved email drafts.
             </p>
           </div>
 
           {loading ? (
-            <div className="px-5 py-8 text-sm text-slate-500">Loading candidates...</div>
-          ) : filteredEntries.length ? (
+            <div className="px-5 py-8 text-sm text-slate-500">Loading jobs and applicants...</div>
+          ) : filteredGroups.length ? (
             <div className="divide-y divide-slate-100">
-              {filteredEntries.map((entry) => (
-                <div
-                  key={entry.applicationId}
-                  className="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1.1fr)_180px_180px_180px]"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href={`/recruiter/candidates/${entry.candidateId}`}
-                        className="truncate text-sm font-semibold text-slate-900 hover:text-blue-700"
-                      >
-                        {entry.candidateEmail ?? entry.candidateId}
-                      </Link>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyle[entry.status]}`}>
-                        {entry.status.replaceAll("_", " ")}
-                      </span>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-slate-500">
-                      {entry.jobTitle} · Resume {entry.resumeId}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(entry.matchedSkills?.length ? entry.matchedSkills : ["AI review pending"]).slice(0, 4).map((skill) => (
-                        <span
-                          key={`${entry.applicationId}-${skill}`}
-                          className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-700"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+              {filteredGroups.map(({ job, applications }) => {
+                const selectedCount = applications.filter(isSelectedForNextStage).length;
+                const rejectedCount = applications.filter((application) => application.status === "REJECTED").length;
+                const pendingCount = applications.filter((application) => typeof application.atsScore !== "number").length;
 
-                  <MetricCell
-                    label="Screening"
-                    value={getScreeningLabel(entry)}
-                    tone={typeof entry.atsScore === "number" ? "text-slate-900" : "text-amber-700"}
-                  />
-                  <MetricCell label="Match strength" value={getMatchStrength(entry)} tone="text-slate-900" />
-                  <div className="flex items-center justify-between gap-3 lg:justify-end">
-                    <div className="text-right">
-                      <p className="text-[11px] uppercase tracking-wide text-slate-400">Next step</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {entry.status === "SHORTLISTED" ? "Interview shortlist" : "Review application"}
+                return (
+                  <div
+                    key={job.jobId}
+                    className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_repeat(4,minmax(100px,140px))_auto] md:items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <BriefcaseBusiness className="h-4 w-4 flex-shrink-0 text-blue-700" />
+                        <h3 className="truncate text-sm font-semibold text-slate-900">{job.title}</h3>
+                      </div>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {job.department} · {job.location} · {job.status}
                       </p>
                     </div>
+                    <MetricCell label="Applicants" value={applications.length} tone="text-slate-900" />
+                    <MetricCell label="Selected / advanced" value={selectedCount} tone="text-emerald-700" />
+                    <MetricCell label="Rejected" value={rejectedCount} tone="text-rose-700" />
+                    <MetricCell label="AI review pending" value={pendingCount} tone="text-amber-700" />
                     <Link
-                      href={`/recruiter/jobs/${entry.jobId}`}
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      href={`/recruiter/jobs/${job.jobId}`}
+                      className="inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                     >
-                      Open Job Review
+                      Review applicants
                     </Link>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="px-5 py-10 text-center">
               <Users className="mx-auto h-6 w-6 text-slate-300" />
-              <p className="mt-3 text-sm font-medium text-slate-900">No candidates found</p>
+              <p className="mt-3 text-sm font-medium text-slate-900">
+                {groups.length ? "No matching jobs or applicants" : "No jobs found"}
+              </p>
               <p className="mt-1 text-xs text-slate-500">
-                Applicants will appear here after candidates submit to open recruiter jobs.
+                Create or publish a job to see its applicants here.
               </p>
             </div>
           )}
@@ -269,13 +240,13 @@ function MetricCell({
   tone,
 }: {
   label: string;
-  value: string;
+  value: number;
   tone: string;
 }) {
   return (
-    <div className="flex flex-col justify-center">
+    <div>
       <p className="text-[11px] uppercase tracking-wide text-slate-400">{label}</p>
-      <p className={`text-sm font-semibold ${tone}`}>{value}</p>
+      <p className={`mt-1 text-sm font-semibold ${tone}`}>{value}</p>
     </div>
   );
 }

@@ -72,12 +72,70 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-function formatDate(value: string): string {
+function formatDate(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    return "Date unavailable";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Date unavailable";
+  }
+
   return new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(value));
+  }).format(date);
+}
+
+function formatApplicationStatus(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    return "Status unavailable";
+  }
+
+  return value
+    .trim()
+    .replace(/[_\s]+/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function deduplicateApplications(applications: Application[]): Application[] {
+  const uniqueApplications = new Map<string, Application>();
+  const applicationsWithoutId: Application[] = [];
+
+  for (const application of applications) {
+    const applicationId =
+      typeof application.applicationId === "string"
+        ? application.applicationId.trim()
+        : "";
+    if (!applicationId) {
+      applicationsWithoutId.push(application);
+      continue;
+    }
+
+    const existing = uniqueApplications.get(applicationId);
+    const currentUpdatedAt =
+      typeof application.updatedAt === "string"
+        ? Date.parse(application.updatedAt)
+        : Number.NaN;
+    const existingUpdatedAt =
+      typeof existing?.updatedAt === "string"
+        ? Date.parse(existing.updatedAt)
+        : Number.NaN;
+
+    if (
+      !existing ||
+      (Number.isFinite(currentUpdatedAt) &&
+        (!Number.isFinite(existingUpdatedAt) ||
+          currentUpdatedAt > existingUpdatedAt))
+    ) {
+      uniqueApplications.set(applicationId, application);
+    }
+  }
+
+  return [...uniqueApplications.values(), ...applicationsWithoutId];
 }
 
 function lastSevenDays(applications: Application[]) {
@@ -91,7 +149,13 @@ function lastSevenDays(applications: Application[]) {
     return {
       day: formatter.format(date),
       applications: applications.filter((item) => {
+        if (typeof item.createdAt !== "string" || !item.createdAt.trim()) {
+          return false;
+        }
         const created = new Date(item.createdAt);
+        if (Number.isNaN(created.getTime())) {
+          return false;
+        }
         return created >= date && created < next;
       }).length,
     };
@@ -122,8 +186,10 @@ export default function DashboardPage() {
         const results = await Promise.allSettled(
           jobs.map((job) => listJobApplications(job.jobId))
         );
-        const applications = results.flatMap((result) =>
-          result.status === "fulfilled" ? result.value : []
+        const applications = deduplicateApplications(
+          results.flatMap((result) =>
+            result.status === "fulfilled" ? result.value : []
+          )
         );
         setData({ jobs, applications });
         if (results.some((result) => result.status === "rejected")) {
@@ -289,14 +355,23 @@ export default function DashboardPage() {
               <div className="mb-4 flex items-start justify-between"><div><h2 className="text-sm font-semibold">Recent applications</h2><p className="mt-1 text-xs text-slate-500">Latest status updates</p></div><Link href={isRecruiter ? "/recruiter/jobs" : "/applications"} className="text-xs font-semibold text-blue-700 hover:text-blue-800">View all</Link></div>
               {loading ? <p className="py-10 text-center text-sm text-slate-500">Loading activity...</p> : recentApplications.length ? (
                 <div className="divide-y divide-slate-100">
-                  {recentApplications.map((application) => {
-                    const job = jobById.get(application.jobId);
+                  {recentApplications.map((application, index) => {
+                    const jobId = typeof application.jobId === "string" ? application.jobId : "";
+                    const job = jobId ? jobById.get(jobId) : undefined;
+                    const jobLabel = job?.title ?? (jobId ? `Job ${jobId.slice(0, 8)}` : "Job details unavailable");
                     const recruiterApplication = application as RecruiterApplication;
+                    const applicationHref = jobId
+                      ? isRecruiter
+                        ? `/recruiter/jobs/${encodeURIComponent(jobId)}`
+                        : `/jobs/${encodeURIComponent(jobId)}`
+                      : isRecruiter
+                        ? "/recruiter/jobs"
+                        : "/applications";
                     return (
-                      <Link key={application.applicationId} href={isRecruiter ? `/recruiter/jobs/${application.jobId}` : `/jobs/${application.jobId}`} className="flex items-center gap-3 py-3 hover:bg-slate-50">
+                      <Link key={application.applicationId || `application-${index}`} href={applicationHref} className="flex items-center gap-3 py-3 hover:bg-slate-50">
                         <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md bg-slate-100 text-slate-600">{isRecruiter ? <CircleUserRound className="h-4 w-4" /> : <BriefcaseBusiness className="h-4 w-4" />}</div>
-                        <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{isRecruiter ? recruiterApplication.candidateEmail ?? "Candidate" : job?.title ?? "Job application"}</p><p className="truncate text-xs text-slate-500">{job?.title ?? `Job ${application.jobId.slice(0, 8)}`} · {formatDate(application.updatedAt)}</p></div>
-                        <span className="hidden rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 sm:block">{application.status.replaceAll("_", " ")}</span><ChevronRight className="h-4 w-4 flex-none text-slate-400" />
+                        <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{isRecruiter ? recruiterApplication.candidateEmail ?? "Candidate" : jobLabel}</p><p className="truncate text-xs text-slate-500">{jobLabel} · {formatDate(application.updatedAt)}</p></div>
+                        <span className="hidden rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 sm:block">{formatApplicationStatus(application.status)}</span><ChevronRight className="h-4 w-4 flex-none text-slate-400" />
                       </Link>
                     );
                   })}

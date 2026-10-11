@@ -6,7 +6,7 @@ import { Briefcase, FileText, RefreshCcw } from "lucide-react";
 import { listApplications, listJobs, type Application, type Job } from "@/services/jobs";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
 
-const statusStyles: Record<Application["status"], string> = {
+const statusStyles: Record<string, string> = {
   APPLIED: "bg-blue-50 text-blue-700",
   PARSING: "bg-amber-50 text-amber-700",
   AI_REVIEWED: "bg-cyan-50 text-cyan-700",
@@ -19,7 +19,7 @@ const statusStyles: Record<Application["status"], string> = {
   REJECTED: "bg-rose-50 text-rose-700",
 };
 
-const statusGuidance: Record<Application["status"], string> = {
+const statusGuidance: Record<string, string> = {
   APPLIED: "Received — your application is queued for secure processing.",
   PARSING: "Your resume is being read and prepared for job-specific screening.",
   AI_REVIEWED: "Screening is complete and the hiring team can now review your profile.",
@@ -120,6 +120,25 @@ export default function ApplicationsPage() {
           <div className="space-y-4">
             {applications.map((application) => {
               const job = jobById.get(application.jobId);
+              const status =
+                typeof application.status === "string"
+                  ? application.status.trim()
+                  : "";
+              const statusLabel = status
+                ? status.replace(/_/g, " ")
+                : "Status unavailable";
+              const statusStyle = Object.prototype.hasOwnProperty.call(
+                statusStyles,
+                status
+              )
+                ? statusStyles[status]
+                : "bg-slate-100 text-slate-600";
+              const guidance = Object.prototype.hasOwnProperty.call(
+                statusGuidance,
+                status
+              )
+                ? statusGuidance[status]
+                : "Status information is not currently available.";
 
               return (
               <article
@@ -143,18 +162,23 @@ export default function ApplicationsPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     {typeof application.atsScore === "number" ? (
-                      <span className="rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-800">
+                      <span className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                        isAnalysisOutdated(application, job)
+                          ? "bg-amber-50 text-amber-900"
+                          : "bg-indigo-50 text-indigo-800"
+                      }`}>
                         Match {Math.round(application.atsScore)}/100
+                        {isAnalysisOutdated(application, job) ? " · earlier criteria" : ""}
                       </span>
                     ) : null}
-                    <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyles[application.status]}`}>
-                      {application.status.replace("_", " ")}
+                    <span className={`w-fit rounded-full px-2 py-1 text-[11px] font-semibold ${statusStyle}`}>
+                      {statusLabel}
                     </span>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs leading-5 text-gray-500">
-                  {statusGuidance[application.status]}
+                  {guidance}
                   </p>
                   <span className="text-xs text-gray-500">
                     Applied {new Date(application.createdAt).toLocaleString()}
@@ -166,7 +190,7 @@ export default function ApplicationsPage() {
                   </p>
                 ) : null}
                 {typeof application.atsScore === "number" ? (
-                  <CandidateReviewReport application={application} />
+                  <CandidateReviewReport application={application} job={jobById.get(application.jobId)} />
                 ) : null}
               </article>
             )})}
@@ -188,7 +212,18 @@ export default function ApplicationsPage() {
   );
 }
 
-function CandidateReviewReport({ application }: { application: Application }) {
+function isAnalysisOutdated(application: Application, job?: Job): boolean {
+  const currentCriteriaUpdatedAt = job?.criteriaUpdatedAt ?? application.currentJobCriteriaUpdatedAt;
+  if (typeof application.atsScore !== "number" || !currentCriteriaUpdatedAt) return false;
+  if (application.analyzedCriteriaUpdatedAt !== undefined) {
+    return application.analyzedCriteriaUpdatedAt !== currentCriteriaUpdatedAt;
+  }
+  const analyzedAt = Date.parse(application.analyzedAt ?? "");
+  const criteriaUpdatedAt = Date.parse(currentCriteriaUpdatedAt);
+  return !Number.isFinite(analyzedAt) || analyzedAt < criteriaUpdatedAt;
+}
+
+function CandidateReviewReport({ application, job }: { application: Application; job?: Job }) {
   const breakdown = application.scoreBreakdown;
   const evidenceLabels = {
     SUPPORTED: "Evidenced",
@@ -207,6 +242,11 @@ function CandidateReviewReport({ application }: { application: Application }) {
         ) : null}
       </summary>
       <div className="space-y-5 border-t border-slate-200 p-4">
+        {isAnalysisOutdated(application, job) ? (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-5 text-amber-900">
+            This report was generated using earlier job criteria. Its score has not been recalculated after the job was edited.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Resume-to-role match</p>

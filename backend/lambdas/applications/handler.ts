@@ -316,7 +316,20 @@ async function listCandidateApplications(
   );
 
   const applications = await Promise.all((response.Items ?? []).map(async (application) => {
-    if (application.status !== "PARSING") return application;
+    const job = application.jobId
+      ? await dynamo.send(new GetCommand({
+          TableName: tableName,
+          Key: {
+            PK: `TENANT#${String(application.jobTenantId ?? application.tenantId ?? auth.tenantId)}#JOB#${String(application.jobId)}`,
+            SK: "PROFILE",
+          },
+        }))
+      : undefined;
+    const applicationWithCriteria = {
+      ...application,
+      currentJobCriteriaUpdatedAt: job?.Item?.criteriaUpdatedAt ?? null,
+    };
+    if (application.status !== "PARSING") return applicationWithCriteria;
     const parse = await dynamo.send(new QueryCommand({
       TableName: tableName,
       KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
@@ -326,8 +339,8 @@ async function listCandidateApplications(
     }));
     const latest = parse.Items?.[0];
     return latest?.status === "FAILED"
-      ? { ...application, processingError: String(latest.details ?? "Resume parsing failed. Please upload a clean PDF and apply again.") }
-      : application;
+      ? { ...applicationWithCriteria, processingError: String(latest.details ?? "Resume parsing failed. Please upload a clean PDF and apply again.") }
+      : applicationWithCriteria;
   }));
   return json(200, { applications });
 }

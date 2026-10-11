@@ -19,6 +19,18 @@ export function compareApplications(
   return left.applicationId.localeCompare(right.applicationId);
 }
 
+export function isSelectedForNextStage(
+  application: Pick<RecruiterApplication, "status">
+): boolean {
+  return [
+    "SHORTLISTED",
+    "INTERVIEW_RECOMMENDED",
+    "INTERVIEW_SCHEDULED",
+    "OFFER",
+    "HIRED",
+  ].includes(application.status);
+}
+
 export function getScreeningLabel(application: RecruiterApplication): string {
   if (typeof application.atsScore === "number") {
     return `${application.atsScore}% match`;

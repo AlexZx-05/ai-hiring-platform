@@ -47,7 +47,7 @@ export default function PublicCareerPage() {
           <section className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
             <h2 className="text-sm font-semibold text-slate-900">Ready to apply?</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">Sign in or create a candidate account to answer the role questions, securely upload your resume, and track every update.</p>
-            <Link href={`/signin?returnTo=${encodeURIComponent(returnTo)}`} className="mt-4 inline-flex rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">Sign in to apply</Link>
+            <Link href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="mt-4 inline-flex rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">Sign in to apply</Link>
           </section>
         ) : role === "recruiter" || role === "admin" ? (
           <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">Recruiter accounts cannot submit candidate applications. Share this link with candidates to start the application flow.</section>

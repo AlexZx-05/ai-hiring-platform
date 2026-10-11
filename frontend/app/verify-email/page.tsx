@@ -9,7 +9,7 @@ export default function VerifyEmailPage() {
           Check your inbox for the verification message, then continue to sign in.
         </p>
         <Link
-          href="/signin"
+          href="/login"
           className="mt-8 inline-flex rounded-lg bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
         >
           Continue

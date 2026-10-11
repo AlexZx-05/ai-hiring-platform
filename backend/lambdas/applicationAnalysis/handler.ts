@@ -810,6 +810,7 @@ export const main: Handler<
         resumeId,
 
         analyzedAt: now,
+        analyzedCriteriaUpdatedAt: job.criteriaUpdatedAt ?? null,
 
         modelId: model,
 
@@ -876,9 +877,9 @@ export const main: Handler<
           improvementTips = :improvementTips,
           applicationRecommendation = :applicationRecommendation,
           analyzedAt = :now,
+          analyzedCriteriaUpdatedAt = :criteriaUpdatedAt,
           modelId = :modelId,
           GSI1SK = :gsi1sk
-        REMOVE analysisLockExpiresAt
         REMOVE analysisLockExpiresAt
       `,
 
@@ -922,6 +923,9 @@ export const main: Handler<
 
         ":applicationRecommendation":
           applicationRecommendation,
+
+        ":criteriaUpdatedAt":
+          job.criteriaUpdatedAt ?? null,
 
         ":modelId":
           model,

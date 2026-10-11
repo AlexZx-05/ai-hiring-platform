@@ -10,14 +10,42 @@ import {
   listRecruiterJobs,
   type RecruiterApplication,
 } from "@/services/recruiter";
+import type { Job } from "@/services/jobs";
 import { compareApplications, getMatchStrength, getScreeningLabel } from "@/lib/screening";
 
 type RankedEntry = RecruiterApplication & {
   jobTitle: string;
 };
 
+const applicationStatusLabel: Record<RecruiterApplication["status"], string> = {
+  APPLIED: "Submitted",
+  PARSING: "Parsing",
+  AI_REVIEWED: "AI review complete",
+  UNDER_REVIEW: "Under review",
+  SHORTLISTED: "Shortlisted",
+  INTERVIEW_RECOMMENDED: "Interview recommended",
+  INTERVIEW_SCHEDULED: "Interview scheduled",
+  OFFER: "Offer",
+  HIRED: "Hired",
+  REJECTED: "Rejected",
+};
+
+const applicationStatusStyle: Record<RecruiterApplication["status"], string> = {
+  APPLIED: "bg-blue-50 text-blue-700",
+  PARSING: "bg-amber-50 text-amber-700",
+  AI_REVIEWED: "bg-cyan-50 text-cyan-700",
+  UNDER_REVIEW: "bg-indigo-50 text-indigo-700",
+  SHORTLISTED: "bg-green-50 text-green-700",
+  INTERVIEW_RECOMMENDED: "bg-violet-50 text-violet-700",
+  INTERVIEW_SCHEDULED: "bg-violet-50 text-violet-700",
+  OFFER: "bg-emerald-50 text-emerald-700",
+  HIRED: "bg-emerald-100 text-emerald-800",
+  REJECTED: "bg-rose-50 text-rose-700",
+};
+
 export default function RankingsPage() {
   const [entries, setEntries] = useState<RankedEntry[]>([]);
+  const [recruiterJobs, setRecruiterJobs] = useState<Job[]>([]);
   const [selectedJob, setSelectedJob] = useState("ALL");
   const [query, setQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("ALL");
@@ -47,6 +75,7 @@ export default function RankingsPage() {
           return;
         }
 
+        setRecruiterJobs(jobs);
         setEntries(applicationSets.flat().sort(compareApplications));
       } catch (loadError) {
         if (!active) {
@@ -70,12 +99,6 @@ export default function RankingsPage() {
       active = false;
     };
   }, []);
-
-  const jobs = useMemo(() => {
-    return Array.from(
-      new Map(entries.map((entry) => [entry.jobId, entry.jobTitle])).entries()
-    );
-  }, [entries]);
 
   const filteredEntries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -104,7 +127,20 @@ export default function RankingsPage() {
     });
   }, [entries, minimumScore, query, selectedJob, selectedStatus]);
 
-  const topThree = filteredEntries.slice(0, 3);
+  const selectedJobEntries = selectedJob === "ALL"
+    ? []
+    : filteredEntries.filter((entry) => entry.jobId === selectedJob);
+  const topRanked = selectedJobEntries[0];
+  const entriesByJob = useMemo(
+    () =>
+      recruiterJobs
+        .map((job) => ({
+          job,
+          entries: filteredEntries.filter((entry) => entry.jobId === job.jobId),
+        }))
+        .filter(({ entries: jobEntries }) => jobEntries.length > 0),
+    [filteredEntries, recruiterJobs]
+  );
   const scoredEntries = filteredEntries.filter((entry) => typeof entry.atsScore === "number");
 
   return (
@@ -129,9 +165,9 @@ export default function RankingsPage() {
               </label>
               <FilterSelect label="Job" value={selectedJob} onChange={setSelectedJob}>
                 <option value="ALL">All jobs</option>
-                {jobs.map(([jobId, title]) => (
-                  <option key={jobId} value={jobId}>
-                    {title}
+                {recruiterJobs.map((job) => (
+                  <option key={job.jobId} value={job.jobId}>
+                    {job.title}
                   </option>
                 ))}
               </FilterSelect>
@@ -139,8 +175,13 @@ export default function RankingsPage() {
                 <option value="ALL">All statuses</option>
                 <option value="SHORTLISTED">Shortlisted</option>
                 <option value="UNDER_REVIEW">Under review</option>
-                <option value="SUBMITTED">Submitted</option>
+                <option value="APPLIED">Submitted</option>
+                <option value="AI_REVIEWED">AI review complete</option>
                 <option value="PARSING">Parsing</option>
+                <option value="INTERVIEW_RECOMMENDED">Interview recommended</option>
+                <option value="INTERVIEW_SCHEDULED">Interview scheduled</option>
+                <option value="OFFER">Offer</option>
+                <option value="HIRED">Hired</option>
                 <option value="REJECTED">Rejected</option>
               </FilterSelect>
               <FilterSelect label="Score" value={minimumScore} onChange={setMinimumScore}>
@@ -162,18 +203,24 @@ export default function RankingsPage() {
           <HighlightCard
             icon={Trophy}
             label="Top ranked"
-            value={topThree[0]?.candidateEmail ?? "No data"}
-            detail={topThree[0] ? `${topThree[0].jobTitle} · ${getScreeningLabel(topThree[0])}` : "Candidates will appear after applications arrive."}
+            value={selectedJob === "ALL" ? "Choose a job" : topRanked?.candidateEmail ?? "No applicants"}
+            detail={selectedJob === "ALL"
+              ? "Rankings are calculated separately for each job."
+              : topRanked ? `${topRanked.jobTitle} · ${getScreeningLabel(topRanked)}` : "No applicants match the selected filters."}
           />
           <HighlightCard
             icon={Sparkles}
             label="Average AI score"
             value={
-              scoredEntries.length
+              selectedJob === "ALL"
+                ? "Select a job"
+                : scoredEntries.length
                 ? `${Math.round(scoredEntries.reduce((sum, entry) => sum + (entry.atsScore ?? 0), 0) / scoredEntries.length)}%`
                 : "Pending"
             }
-            detail="Shown only when resume analysis results exist."
+            detail={selectedJob === "ALL"
+              ? "Choose a job to compare scores within that role."
+              : "Average for this job when analysis results exist."}
           />
           <HighlightCard
             icon={BriefcaseBusiness}
@@ -187,7 +234,7 @@ export default function RankingsPage() {
           <div className="border-b border-slate-100 px-5 py-4">
             <h2 className="text-sm font-semibold text-slate-900">Leaderboard</h2>
             <p className="mt-1 text-xs text-slate-500">
-              If the Grok-backed scoring API is not connected yet, candidates stay visible here with manual-review priority.
+              Applicants are ranked separately within each job. Applications awaiting analysis remain visible after scored applicants.
             </p>
           </div>
 
@@ -195,11 +242,30 @@ export default function RankingsPage() {
             <div className="px-5 py-8 text-sm text-slate-500">Loading rankings...</div>
           ) : filteredEntries.length ? (
             <div className="divide-y divide-slate-100">
-              {filteredEntries.map((entry, index) => (
-                <div
-                  key={entry.applicationId}
-                  className="grid gap-4 px-5 py-4 lg:grid-cols-[80px_minmax(0,1.2fr)_180px_180px_160px]"
-                >
+              {entriesByJob.map(({ job, entries: jobEntries }) => (
+                <section key={job.jobId} aria-labelledby={`job-ranking-${job.jobId}`}>
+                  <header className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 px-5 py-4">
+                    <div>
+                      <h3 id={`job-ranking-${job.jobId}`} className="text-sm font-semibold text-slate-900">
+                        {job.title}
+                      </h3>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {job.department} · {jobEntries.length} applicant{jobEntries.length === 1 ? "" : "s"} · ranks are within this job
+                      </p>
+                    </div>
+                    <Link
+                      href={`/recruiter/jobs/${job.jobId}`}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Review applicants
+                    </Link>
+                  </header>
+                  <div className="divide-y divide-slate-100">
+                  {jobEntries.map((entry, index) => (
+                    <div
+                      key={entry.applicationId}
+                      className="grid gap-4 px-5 py-4 lg:grid-cols-[80px_minmax(0,1.2fr)_180px_180px_160px]"
+                    >
                   <div className="flex items-center">
                     <div className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white">
                       #{index + 1}
@@ -213,6 +279,9 @@ export default function RankingsPage() {
                     >
                       {entry.candidateEmail ?? entry.candidateId}
                     </Link>
+                    <span className={`ml-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${applicationStatusStyle[entry.status]}`}>
+                      {applicationStatusLabel[entry.status]}
+                    </span>
                     <p className="mt-1 truncate text-xs text-slate-500">{entry.jobTitle}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(entry.matchedSkills?.length ? entry.matchedSkills : ["Awaiting AI skills extraction"]).slice(0, 4).map((skill) => (
@@ -240,7 +309,10 @@ export default function RankingsPage() {
                       Review
                     </Link>
                   </div>
-                </div>
+                    </div>
+              ))}
+                  </div>
+                </section>
               ))}
             </div>
           ) : (

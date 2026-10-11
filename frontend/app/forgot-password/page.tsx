@@ -57,7 +57,7 @@ export default function ForgotPasswordPage() {
             </svg>
           </div>
           <div>
-            <p className="text-white text-xs font-semibold tracking-widest uppercase">TalentFlow AI</p>
+            <p className="text-white text-xs font-semibold tracking-widest uppercase">HireAI</p>
             <p className="text-slate-400 text-[11px]">Hiring Intelligence Platform</p>
           </div>
         </div>

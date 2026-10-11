@@ -18,14 +18,22 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+function isJwt(token: string | null): token is string {
+  return Boolean(token && token.split(".").length === 3);
+}
+
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     // This REST API's Cognito authorizer expects an ID token when the route has
     // no OAuth scopes. Lambdas calling Cognito GetUser receive the access token
     // separately through X-Cognito-Access-Token on the endpoints that need it.
-    const token =
-      localStorage.getItem("auth_id_token") ??
-      localStorage.getItem("auth_access_token");
+    const idToken = localStorage.getItem("auth_id_token");
+    const accessToken = localStorage.getItem("auth_access_token");
+    const token = isJwt(idToken)
+      ? idToken
+      : isJwt(accessToken)
+        ? accessToken
+        : null;
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

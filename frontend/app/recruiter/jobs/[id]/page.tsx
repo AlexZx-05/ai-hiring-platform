@@ -24,8 +24,15 @@ import {
   updateApplicationStatus,
   type RecruiterApplication,
 } from "@/services/recruiter";
-import { compareApplications, getMatchStrength, getScreeningLabel } from "@/lib/screening";
+import {
+  compareApplications,
+  getMatchStrength,
+  getScreeningLabel,
+  isSelectedForNextStage,
+} from "@/lib/screening";
 import WorkspaceShell from "@/components/workspace/WorkspaceShell";
+
+type ApplicantFilter = "ALL" | "SELECTED" | "REJECTED";
 
 const statusStyle: Record<RecruiterApplication["status"], string> = {
   APPLIED: "bg-blue-50 text-blue-700",
@@ -50,7 +57,7 @@ const statusLabels: Record<RecruiterApplication["status"], string> = {
   INTERVIEW_SCHEDULED: "Interview scheduled",
   OFFER: "Offer",
   HIRED: "Hired",
-  REJECTED: "Closed",
+  REJECTED: "Rejected",
 };
 
 const forwardActions: Partial<Record<RecruiterApplication["status"], {
@@ -93,6 +100,16 @@ function getReviewRecommendation(application: RecruiterApplication) {
   };
 }
 
+function isAnalysisOutdated(application: RecruiterApplication, job?: Job): boolean {
+  if (typeof application.atsScore !== "number" || !job?.criteriaUpdatedAt) return false;
+  if (application.analyzedCriteriaUpdatedAt !== undefined) {
+    return application.analyzedCriteriaUpdatedAt !== job.criteriaUpdatedAt;
+  }
+  const analyzedAt = Date.parse(application.analyzedAt ?? "");
+  const criteriaUpdatedAt = Date.parse(job.criteriaUpdatedAt);
+  return !Number.isFinite(analyzedAt) || analyzedAt < criteriaUpdatedAt;
+}
+
 function candidateEmailDraft(application: RecruiterApplication, jobTitle?: string): {
   to: string;
   subject: string;
@@ -105,24 +122,45 @@ function candidateEmailDraft(application: RecruiterApplication, jobTitle?: strin
   const candidateName = application.candidateEmail.split("@")[0].replace(/[._-]/g, " ");
   const role = jobTitle ?? "the role";
   const declined = application.status === "REJECTED";
+  const selected = isSelectedForNextStage(application);
+  if (!declined && !selected) return null;
+
   const interview = application.status === "INTERVIEW_RECOMMENDED" || application.status === "INTERVIEW_SCHEDULED";
+  const offer = application.status === "OFFER";
+  const hired = application.status === "HIRED";
   const subject = declined
     ? `Update on your ${role} application`
     : interview
       ? `Interview next steps for ${role}`
-      : `Next steps for your ${role} application`;
+      : offer
+        ? `Offer next steps for ${role}`
+        : hired
+          ? `Congratulations on joining ${role}`
+          : `Next steps for your ${role} application`;
   const body = declined
     ? `Hello ${candidateName},\n\nThank you for the time and effort you invested in applying for ${role}. After careful consideration, we will not be progressing your application at this time.\n\nWe appreciate your interest and wish you every success in your search.\n\nBest regards,\nRecruiting Team`
     : interview
       ? `Hello ${candidateName},\n\nThank you for your interest in the ${role} position. We have reviewed your application and would like to invite you to the next interview stage.\n\nPlease reply with a few times that work for you, along with your time zone. We will confirm the interview format and details.\n\nBest regards,\nRecruiting Team`
-      : `Hello ${candidateName},\n\nThank you for your interest in ${role}. We are reviewing your application and will share an update about next steps as soon as we can.\n\nBest regards,\nRecruiting Team`;
+      : offer
+        ? `Hello ${candidateName},\n\nWe are pleased to share that we would like to make you an offer for the ${role} position. Please reply so we can share and discuss the offer details.\n\nBest regards,\nRecruiting Team`
+        : hired
+          ? `Hello ${candidateName},\n\nCongratulations. We are pleased to confirm that you have been selected for the ${role} position. Our team will contact you with onboarding details.\n\nBest regards,\nRecruiting Team`
+          : `Hello ${candidateName},\n\nThank you for applying for the ${role} position. We have reviewed your application and would like to move you forward in our hiring process. We will contact you with the next steps.\n\nBest regards,\nRecruiting Team`;
 
   return {
     to: application.candidateEmail,
     subject,
     body,
     url: `mailto:${encodeURIComponent(application.candidateEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-    label: declined ? "Draft rejection email" : interview ? "Draft interview email" : "Draft update email",
+    label: declined
+      ? "rejection email draft"
+      : interview
+        ? "interview email draft"
+        : offer
+          ? "offer email draft"
+          : hired
+            ? "welcome email draft"
+            : "selection email draft",
   };
 }
 
@@ -142,6 +180,7 @@ export default function RecruiterJobApplicantsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [copiedDraftId, setCopiedDraftId] = useState<string | null>(null);
+  const [applicantFilter, setApplicantFilter] = useState<ApplicantFilter>("ALL");
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -271,8 +310,14 @@ export default function RecruiterJobApplicantsPage() {
   };
 
   const ranked = useMemo(() => [...applications].sort(compareApplications), [applications]);
+  const visibleApplications = ranked.filter((application) => {
+    if (applicantFilter === "SELECTED") return isSelectedForNextStage(application);
+    if (applicantFilter === "REJECTED") return application.status === "REJECTED";
+    return true;
+  });
   const scoredApplications = ranked.filter((application) => typeof application.atsScore === "number");
-  const shortlistCount = ranked.filter((application) => application.status === "SHORTLISTED").length;
+  const selectedCount = ranked.filter(isSelectedForNextStage).length;
+  const rejectedCount = ranked.filter((application) => application.status === "REJECTED").length;
   const publicJobUrl = job?.publicTenantSlug && job.publicSlug && typeof window !== "undefined"
     ? `${window.location.origin}/careers/${job.publicTenantSlug}/${job.publicSlug}`
     : null;
@@ -331,6 +376,12 @@ export default function RecruiterJobApplicantsPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/recruiter/jobs/${job.jobId}/edit`}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Edit job details
+                </Link>
                 {publicJobUrl ? <><button type="button" onClick={() => void copyJobLink()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Copy className="h-3.5 w-3.5" />Copy job link</button><a href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicJobUrl)}`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">LinkedIn</a><a href={`https://wa.me/?text=${encodeURIComponent(`${job?.title} — ${publicJobUrl}`)}`} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">WhatsApp</a><a href={`mailto:?subject=${encodeURIComponent(job?.title ?? "Job opportunity")}&body=${encodeURIComponent(publicJobUrl)}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">Email</a></> : null}
                 <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"><RefreshCcw className="h-3.5 w-3.5" />Refresh applicants</button>
               </div>
@@ -339,9 +390,10 @@ export default function RecruiterJobApplicantsPage() {
       </section>
 
       <section className="mt-6 space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Total applicants" value={String(ranked.length)} icon={UserCheck} />
-          <MetricCard label="Shortlisted" value={String(shortlistCount)} icon={CheckCircle2} />
+          <MetricCard label="Selected / advanced" value={String(selectedCount)} icon={CheckCircle2} />
+          <MetricCard label="Rejected" value={String(rejectedCount)} icon={XCircle} />
           <MetricCard
             label="Average AI score"
             value={
@@ -373,8 +425,31 @@ export default function RecruiterJobApplicantsPage() {
             Loading applicants...
           </div>
         ) : ranked.length ? (
+          <>
+          <div className="flex flex-wrap gap-2" aria-label="Filter applicants by status">
+            {([
+              { id: "ALL", label: "All applicants", count: ranked.length },
+              { id: "SELECTED", label: "Selected / advanced", count: selectedCount },
+              { id: "REJECTED", label: "Rejected", count: rejectedCount },
+            ] as const).map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setApplicantFilter(filter.id)}
+                aria-pressed={applicantFilter === filter.id}
+                className={`rounded-full px-3 py-2 text-xs font-semibold ${
+                  applicantFilter === filter.id
+                    ? "bg-slate-900 text-white"
+                    : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {filter.label} ({filter.count})
+              </button>
+            ))}
+          </div>
+          {visibleApplications.length ? (
           <div className="space-y-4">
-            {ranked.map((application, index) => {
+            {visibleApplications.map((application, index) => {
               const emailDraft = candidateEmailDraft(application, job?.title);
               return (
               <article
@@ -397,10 +472,19 @@ export default function RecruiterJobApplicantsPage() {
                         {statusLabels[application.status]}
                       </span>
                     </div>
+                    {emailDraft ? (
+                      <p className={`mt-2 text-xs ${application.status === "REJECTED" ? "text-rose-700" : "text-emerald-700"}`}>
+                        {application.status === "REJECTED"
+                          ? "Rejected after recruiter review. Prepare the email draft below, then review and send it yourself."
+                          : "Selected to move forward. Prepare an email draft below, then review and send it yourself."}
+                      </p>
+                    ) : null}
 
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
                       <DataPoint
-                        label="AI match score"
+                        label={isAnalysisOutdated(application, job ?? undefined)
+                          ? "AI match score · earlier criteria"
+                          : "AI match score"}
                         value={getScreeningLabel(application)}
                         tone={typeof application.atsScore === "number" ? "text-slate-900" : "text-amber-700"}
                       />
@@ -417,6 +501,12 @@ export default function RecruiterJobApplicantsPage() {
                         <p className="font-semibold">Resume processing did not complete</p>
                         <p className="mt-1 leading-6">{application.processingError}</p>
                       </div>
+                    ) : null}
+
+                    {isAnalysisOutdated(application, job ?? undefined) ? (
+                      <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm leading-5 text-amber-900">
+                        This report uses earlier job criteria. The score has not been recalculated after the job was edited.
+                      </p>
                     ) : null}
 
                     {(() => {
@@ -522,7 +612,7 @@ export default function RecruiterJobApplicantsPage() {
                     {emailDraft ? (
                       <>
                         <ActionButton
-                          label={copiedDraftId === application.applicationId ? "Email draft copied" : "Copy email draft"}
+                          label={copiedDraftId === application.applicationId ? "Email draft copied" : `Copy ${emailDraft.label}`}
                           icon={Copy}
                           disabled={false}
                           className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -533,7 +623,7 @@ export default function RecruiterJobApplicantsPage() {
                           className="flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                         >
                           <Mail className="h-3.5 w-3.5" />
-                          Open email draft
+                          Open {emailDraft.label}
                         </a>
                       </>
                     ) : null}
@@ -543,6 +633,12 @@ export default function RecruiterJobApplicantsPage() {
               );
             })}
           </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              No applicants match this status filter.
+            </div>
+          )}
+          </>
         ) : (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
             <FileText className="mx-auto h-6 w-6 text-slate-300" />

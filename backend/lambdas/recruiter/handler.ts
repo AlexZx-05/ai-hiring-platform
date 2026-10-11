@@ -106,6 +106,11 @@ function normalizeAnalysisRecord(analysis: Record<string, unknown>) {
       : [],
     analysisStrengths: parseStringList(analysis.strengths).slice(0, 8),
     analysisImprovementTips: parseStringList(analysis.improvementTips).slice(0, 8),
+    analyzedAt: typeof analysis.analyzedAt === "string" ? analysis.analyzedAt : undefined,
+    analyzedCriteriaUpdatedAt:
+      typeof analysis.analyzedCriteriaUpdatedAt === "string" || analysis.analyzedCriteriaUpdatedAt === null
+        ? analysis.analyzedCriteriaUpdatedAt
+        : undefined,
   };
 }
 

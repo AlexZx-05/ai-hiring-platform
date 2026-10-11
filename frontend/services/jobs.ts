@@ -38,6 +38,8 @@ export type Job = {
   screeningQuestions: ScreeningQuestion[];
   status: "OPEN" | "CLOSED" | "DRAFT";
   createdAt: string;
+  updatedAt?: string;
+  criteriaUpdatedAt?: string;
 };
 
 export type Application = {
@@ -69,6 +71,8 @@ export type Application = {
   strengths?: string[];
   improvementTips?: string[];
   analyzedAt?: string;
+  analyzedCriteriaUpdatedAt?: string | null;
+  currentJobCriteriaUpdatedAt?: string | null;
   applicationRecommendation?: {
     label: "Consider applying" | "Good evidence to discuss" | "Review your evidence first";
     rationale: string;

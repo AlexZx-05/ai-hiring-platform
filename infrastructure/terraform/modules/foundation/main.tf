@@ -93,9 +93,9 @@ resource "aws_iam_role" "textract_notification" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
+      Effect    = "Allow"
       Principal = { Service = "textract.amazonaws.com" }
-      Action = "sts:AssumeRole"
+      Action    = "sts:AssumeRole"
     }]
   })
 
@@ -784,8 +784,8 @@ resource "aws_iam_role" "post_confirmation" {
 
 data "aws_iam_policy_document" "post_confirmation" {
   statement {
-    effect  = "Allow"
-    actions = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    effect    = "Allow"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.post_confirmation.arn}:*"]
   }
 
@@ -1633,11 +1633,11 @@ resource "aws_lambda_function" "analyze_resume" {
 
   environment {
     variables = {
-      TABLE_NAME        = aws_dynamodb_table.hiring_platform.name
+      TABLE_NAME         = aws_dynamodb_table.hiring_platform.name
       RESUME_BUCKET_NAME = aws_s3_bucket.resumes.id
-      AI_API_URL        = var.ai_api_url
-      AI_MODEL_ID       = var.ai_model_id
-      AI_SECRET_ARN     = aws_secretsmanager_secret.xai_api.arn
+      AI_API_URL         = var.ai_api_url
+      AI_MODEL_ID        = var.ai_model_id
+      AI_SECRET_ARN      = aws_secretsmanager_secret.xai_api.arn
     }
   }
 
@@ -1759,8 +1759,8 @@ data "aws_iam_policy_document" "backend_api" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = [
+    effect = "Allow"
+    actions = [
       "cognito-idp:AdminCreateUser",
       "cognito-idp:AdminAddUserToGroup",
       "cognito-idp:AdminGetUser",
@@ -1851,6 +1851,12 @@ resource "aws_api_gateway_resource" "jobs_id" {
   rest_api_id = aws_api_gateway_rest_api.main.id
   parent_id   = aws_api_gateway_resource.jobs.id
   path_part   = "{jobId}"
+}
+
+resource "aws_api_gateway_resource" "jobs_id_status" {
+  rest_api_id = aws_api_gateway_rest_api.main.id
+  parent_id   = aws_api_gateway_resource.jobs_id.id
+  path_part   = "status"
 }
 
 resource "aws_api_gateway_resource" "applications" {
@@ -1999,6 +2005,18 @@ locals {
       lambda      = "jobs"
       path        = "/jobs/{jobId}"
     }
+    jobs_id_patch = {
+      resource_id = aws_api_gateway_resource.jobs_id.id
+      method      = "PATCH"
+      lambda      = "jobs"
+      path        = "/jobs/{jobId}"
+    }
+    jobs_id_status_patch = {
+      resource_id = aws_api_gateway_resource.jobs_id_status.id
+      method      = "PATCH"
+      lambda      = "jobs"
+      path        = "/jobs/{jobId}/status"
+    }
     applications_get = {
       resource_id = aws_api_gateway_resource.applications.id
       method      = "GET"
@@ -2054,6 +2072,21 @@ locals {
       path        = "/admin/recruiter-invitations"
     }
   }
+  protected_api_options = {
+    for key in [
+      "jobs_get",
+      "jobs_id_get",
+      "jobs_id_status_patch",
+      "applications_get",
+      "recruiter_jobs_get",
+      "recruiter_job_applications_get",
+      "recruiter_application_status_patch",
+      "recruiter_application_resume_url_get",
+      "recruiter_candidate_get",
+      "recruiter_dashboard_get",
+      "admin_recruiter_invitation_post",
+    ] : key => local.protected_api_routes[key]
+  }
 }
 
 resource "aws_api_gateway_method" "protected" {
@@ -2076,7 +2109,7 @@ resource "aws_api_gateway_integration" "protected" {
 }
 
 resource "aws_api_gateway_method" "protected_options" {
-  for_each      = local.protected_api_routes
+  for_each      = local.protected_api_options
   rest_api_id   = aws_api_gateway_rest_api.main.id
   resource_id   = each.value.resource_id
   http_method   = "OPTIONS"
@@ -2084,7 +2117,7 @@ resource "aws_api_gateway_method" "protected_options" {
 }
 
 resource "aws_api_gateway_integration" "protected_options" {
-  for_each          = local.protected_api_routes
+  for_each          = local.protected_api_options
   rest_api_id       = aws_api_gateway_rest_api.main.id
   resource_id       = each.value.resource_id
   http_method       = aws_api_gateway_method.protected_options[each.key].http_method
@@ -2093,7 +2126,7 @@ resource "aws_api_gateway_integration" "protected_options" {
 }
 
 resource "aws_api_gateway_method_response" "protected_options_200" {
-  for_each    = local.protected_api_routes
+  for_each    = local.protected_api_options
   rest_api_id = aws_api_gateway_rest_api.main.id
   resource_id = each.value.resource_id
   http_method = aws_api_gateway_method.protected_options[each.key].http_method
@@ -2106,13 +2139,13 @@ resource "aws_api_gateway_method_response" "protected_options_200" {
 }
 
 resource "aws_api_gateway_integration_response" "protected_options_200" {
-  for_each    = local.protected_api_routes
+  for_each    = local.protected_api_options
   rest_api_id = aws_api_gateway_rest_api.main.id
   resource_id = each.value.resource_id
   http_method = aws_api_gateway_method.protected_options[each.key].http_method
   status_code = aws_api_gateway_method_response.protected_options_200[each.key].status_code
   response_parameters = {
-    "method.response.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
+    "method.response.header.Access-Control-Allow-Origin"  = "'*'"
     "method.response.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type'"
     "method.response.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
@@ -2509,7 +2542,7 @@ resource "aws_api_gateway_gateway_response" "default_4xx" {
   response_type = "DEFAULT_4XX"
 
   response_parameters = {
-    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type,X-Cognito-Access-Token'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
@@ -2524,7 +2557,7 @@ resource "aws_api_gateway_gateway_response" "default_5xx" {
   response_type = "DEFAULT_5XX"
 
   response_parameters = {
-    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'http://localhost:3000'"
+    "gatewayresponse.header.Access-Control-Allow-Origin"  = "'*'"
     "gatewayresponse.header.Access-Control-Allow-Headers" = "'Authorization,Content-Type,X-Cognito-Access-Token'"
     "gatewayresponse.header.Access-Control-Allow-Methods" = "'GET,POST,PATCH,OPTIONS'"
   }
@@ -2575,7 +2608,9 @@ resource "aws_api_gateway_deployment" "main" {
       aws_api_gateway_integration_response.resume_analyze_options_200.id,
       aws_api_gateway_integration_response.resume_analyze_options_200.response_parameters,
       aws_api_gateway_gateway_response.default_4xx.id,
+      aws_api_gateway_gateway_response.default_4xx.response_parameters,
       aws_api_gateway_gateway_response.default_5xx.id,
+      aws_api_gateway_gateway_response.default_5xx.response_parameters,
       aws_api_gateway_authorizer.cognito.id,
       [for method in values(aws_api_gateway_method.protected) : {
         id                   = method.id
@@ -2585,8 +2620,19 @@ resource "aws_api_gateway_deployment" "main" {
       }],
       aws_api_gateway_integration.public_job_get.id,
       [for integration in values(aws_api_gateway_integration.protected) : integration.id],
+      [for method in values(aws_api_gateway_method.protected_options) : {
+        id            = method.id
+        authorization = method.authorization
+      }],
       [for integration in values(aws_api_gateway_integration.protected_options) : integration.id],
-      [for response in values(aws_api_gateway_integration_response.protected_options_200) : response.id]
+      [for response in values(aws_api_gateway_method_response.protected_options_200) : {
+        id                 = response.id
+        response_parameters = response.response_parameters
+      }],
+      [for response in values(aws_api_gateway_integration_response.protected_options_200) : {
+        id                 = response.id
+        response_parameters = response.response_parameters
+      }]
     ]))
   }
 

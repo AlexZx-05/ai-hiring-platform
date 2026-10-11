@@ -22,12 +22,16 @@ I built this project to make resume review easier and clearer for both sides:
 ## How it works
 
 1. A recruiter creates and publishes a job with a description, requirements, skills, and optional screening questions.
-2. A candidate answers the job-related questions, uploads a PDF resume, and applies.
-3. The candidate's browser uses PDF.js to read selectable text from the PDF. The resume file is uploaded to secure AWS storage, and the application is saved through the API.
-4. The backend sends the resume text and job details to the configured AI provider for a structured comparison. The result is saved with the application.
-5. The candidate can see a report with the match score, score dimensions, strengths, gaps, and evidence.
-6. The recruiter sees applicants ranked by score, with earlier applications first when scores are tied. The recruiter reviews the evidence and manually advances or rejects each application.
-7. Recruiters can copy or open an email draft. The platform does not send the email.
+2. In Job postings, recruiters can manage each job row and set its status to Open, Draft, or Closed. Closing a role prevents new applications; changing the status updates both the recruiter job and public listing.
+3. Recruiters can edit a job's title, department, location, experience, employment type, work mode, salary range, description, requirements, skills, and screening questions.
+4. Editing job criteria does not automatically rerun AI analysis. Existing reports keep their saved scores and are marked when they were generated against an earlier version of the job criteria.
+5. A candidate answers the job-related questions, uploads a PDF resume, and applies.
+6. The candidate's browser uses PDF.js to read selectable text from the PDF. The resume file is uploaded to secure AWS storage, and the application is saved through the API.
+7. The backend sends the resume text and job details to the configured AI provider for a structured comparison. The result is saved with the application.
+8. The candidate can see a report with the match score, score dimensions, strengths, gaps, and evidence.
+9. The recruiter opens the Candidate directory, which lists jobs in rows with applicant, selected/advanced, rejected, and pending-review counts.
+10. The recruiter can also open the Candidate leaderboard. Applicants are grouped and ranked separately for each job, so a score for one role is not directly compared with a score for another. Within a job, earlier applications come first when scores are tied. The recruiter can filter the list, review evidence and status, and manually change each applicant's status.
+11. After a recruiter selects or rejects an applicant, the job review provides a matching email draft. The recruiter must copy or open, review, and send the message; the platform never sends it automatically.
 
 The score is only one review signal. Recruiters make the final decision.
 
