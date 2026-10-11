@@ -5,7 +5,7 @@ import type {
 } from "aws-lambda";
 import { GetCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { dynamo, requireTableName } from "../../shared/dynamodb.js";
-import { getHttpMethod, getPathParam, json, parseJsonBody } from "../../shared/http.js";
+import { getHttpMethod, getPathParam, getRawPath, json, parseJsonBody } from "../../shared/http.js";
 import { withAuth } from "../../shared/middlewares/with-auth.js";
 import type { AuthContext } from "../../shared/types/auth.js";
 import type {
@@ -169,10 +169,9 @@ async function listJobs(auth: AuthContext): Promise<APIGatewayProxyStructuredRes
     new QueryCommand({
       TableName: tableName,
       IndexName: "GSI1",
-      KeyConditionExpression: "GSI1PK = :pk AND begins_with(GSI1SK, :open)",
+      KeyConditionExpression: "GSI1PK = :pk",
       ExpressionAttributeValues: {
         ":pk": tenantJobsPk(auth.tenantId),
-        ":open": "STATUS#OPEN#",
       },
       ScanIndexForward: false,
       Limit: 50,
@@ -259,6 +258,7 @@ async function createJob(
     postedBy: auth.sub,
     createdAt: now,
     updatedAt: now,
+    criteriaUpdatedAt: now,
     GSI1PK: tenantJobsPk(auth.tenantId),
     GSI1SK: `STATUS#${validJob.status}#CREATED#${now}#JOB#${jobId}`,
     GSI2PK: `TENANT#${auth.tenantId}#JOB_DEPARTMENT#${validJob.department.toLowerCase()}`,
@@ -277,6 +277,7 @@ async function createJob(
     publicTenantSlug,
     publicSlug,
     createdAt: now,
+    criteriaUpdatedAt: now,
     GSI1PK: validJob.status === "OPEN" ? publicOpenJobsGsiPk() : "PUBLIC#DRAFT_JOBS",
     GSI1SK: `CREATED#${now}#JOB#${jobId}`,
   };
@@ -305,6 +306,254 @@ async function createJob(
   return json(201, { job: item });
 }
 
+async function updateJobStatus(
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
+): Promise<APIGatewayProxyStructuredResultV2> {
+  if (auth.role !== "recruiter" && auth.role !== "admin") {
+    return json(403, { message: "Only recruiters can update job status" });
+  }
+
+  const jobId = getPathParam(event, "jobId") ?? getPathParam(event, "id");
+  if (!jobId) {
+    return json(400, { message: "jobId is required" });
+  }
+
+  let status: JobRecord["status"];
+  try {
+    const payload = parseJsonBody<{ status?: unknown }>(event);
+    if (payload.status !== "OPEN" && payload.status !== "CLOSED" && payload.status !== "DRAFT") {
+      return json(400, { message: "status must be OPEN, CLOSED, or DRAFT" });
+    }
+    status = payload.status;
+  } catch (error) {
+    return json(400, { message: error instanceof Error ? error.message : "Invalid job status" });
+  }
+
+  const tableName = requireTableName();
+  const pk = jobPk(auth.tenantId, jobId);
+  const existingJob = await dynamo.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { PK: pk, SK: "PROFILE" },
+    })
+  );
+  if (!existingJob.Item || existingJob.Item.entityType !== "JOB") {
+    return json(404, { message: "Job not found" });
+  }
+
+  const now = new Date().toISOString();
+  const publicIndexPk = status === "OPEN" ? publicOpenJobsGsiPk() : "PUBLIC#INACTIVE_JOBS";
+
+  await dynamo.send(
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Update: {
+            TableName: tableName,
+            Key: { PK: pk, SK: "PROFILE" },
+            UpdateExpression: "SET #status = :status, updatedAt = :updatedAt, GSI1SK = :gsi1sk",
+            ConditionExpression: "entityType = :entityType AND tenantId = :tenantId",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":status": status,
+              ":updatedAt": now,
+              ":gsi1sk": `STATUS#${status}#CREATED#${String(existingJob.Item.createdAt)}#JOB#${jobId}`,
+              ":entityType": "JOB",
+              ":tenantId": auth.tenantId,
+            },
+          },
+        },
+        {
+          Update: {
+            TableName: tableName,
+            Key: { PK: publicJobsPk(), SK: publicJobSk(jobId) },
+            UpdateExpression: "SET #status = :status, updatedAt = :updatedAt, GSI1PK = :gsi1pk",
+            ConditionExpression: "entityType = :entityType AND tenantId = :tenantId",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":status": status,
+              ":updatedAt": now,
+              ":gsi1pk": publicIndexPk,
+              ":entityType": "PUBLIC_JOB",
+              ":tenantId": auth.tenantId,
+            },
+          },
+        },
+      ],
+    })
+  );
+
+  return json(200, {
+    job: {
+      ...existingJob.Item,
+      status,
+      updatedAt: now,
+      GSI1SK: `STATUS#${status}#CREATED#${String(existingJob.Item.createdAt)}#JOB#${jobId}`,
+    },
+  });
+}
+
+async function updateJobDetails(
+  event: APIGatewayProxyEventV2,
+  auth: AuthContext
+): Promise<APIGatewayProxyStructuredResultV2> {
+  if (auth.role !== "recruiter" && auth.role !== "admin") {
+    return json(403, { message: "Only recruiters can edit jobs" });
+  }
+
+  const jobId = getPathParam(event, "jobId") ?? getPathParam(event, "id");
+  if (!jobId) {
+    return json(400, { message: "jobId is required" });
+  }
+
+  const tableName = requireTableName();
+  const pk = jobPk(auth.tenantId, jobId);
+  const existingJob = await dynamo.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: { PK: pk, SK: "PROFILE" },
+    })
+  );
+  if (!existingJob.Item || existingJob.Item.entityType !== "JOB") {
+    return json(404, { message: "Job not found" });
+  }
+
+  let validJob: ReturnType<typeof validateJob>;
+  try {
+    validJob = validateJob({
+      ...parseJsonBody<CreateJobRequest>(event),
+      status: existingJob.Item.status as JobRecord["status"],
+    });
+  } catch (error) {
+    return json(400, { message: error instanceof Error ? error.message : "Invalid job details" });
+  }
+
+  const now = new Date().toISOString();
+  const createdAt = String(existingJob.Item.createdAt);
+  const previousUpdatedAt = existingJob.Item.updatedAt;
+  const publicTenantSlug = String(existingJob.Item.publicTenantSlug ?? slugify(auth.tenantId));
+  const publicSlug = String(existingJob.Item.publicSlug ?? `${slugify(validJob.title)}-${jobId.slice(0, 6)}`);
+  const updatedFields = {
+    ...validJob,
+    updatedAt: now,
+    criteriaUpdatedAt: now,
+    GSI1PK: tenantJobsPk(auth.tenantId),
+    GSI1SK: `STATUS#${validJob.status}#CREATED#${createdAt}#JOB#${jobId}`,
+    GSI2PK: `TENANT#${auth.tenantId}#JOB_DEPARTMENT#${validJob.department.toLowerCase()}`,
+    GSI2SK: `CREATED#${createdAt}#JOB#${jobId}`,
+  };
+  const removeSalary = validJob.salaryRange ? "" : " REMOVE salaryRange";
+  const jobUpdateExpression = [
+    "SET title = :title, department = :department, #location = :location, employmentType = :employmentType,",
+    "workMode = :workMode, experienceLevel = :experienceLevel, description = :description,",
+    "requirements = :requirements, skills = :skills, screeningQuestions = :screeningQuestions,",
+    "updatedAt = :updatedAt, criteriaUpdatedAt = :criteriaUpdatedAt, GSI1SK = :gsi1sk,",
+    "GSI2PK = :gsi2pk, GSI2SK = :gsi2sk",
+    validJob.salaryRange ? ", salaryRange = :salaryRange" : "",
+    removeSalary,
+  ].join(" ");
+  const publicUpdateExpression = [
+    "SET title = :title, department = :department, #location = :location, employmentType = :employmentType,",
+    "workMode = :workMode, experienceLevel = :experienceLevel, description = :description,",
+    "requirements = :requirements, skills = :skills, screeningQuestions = :screeningQuestions,",
+    "updatedAt = :updatedAt, criteriaUpdatedAt = :criteriaUpdatedAt",
+    validJob.salaryRange ? ", salaryRange = :salaryRange" : "",
+    removeSalary,
+  ].join(" ");
+  const commonExpressionAttributeValues = {
+    ":title": validJob.title,
+    ":department": validJob.department,
+    ":location": validJob.location,
+    ":employmentType": validJob.employmentType,
+    ":workMode": validJob.workMode,
+    ":experienceLevel": validJob.experienceLevel,
+    ":description": validJob.description,
+    ":requirements": validJob.requirements,
+    ":skills": validJob.skills,
+    ":screeningQuestions": validJob.screeningQuestions,
+    ":updatedAt": now,
+    ":criteriaUpdatedAt": now,
+    ...(validJob.salaryRange ? { ":salaryRange": validJob.salaryRange } : {}),
+  };
+
+  try {
+    await dynamo.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: pk, SK: "PROFILE" },
+              UpdateExpression: jobUpdateExpression,
+              ExpressionAttributeNames: { "#location": "location" },
+              ConditionExpression: typeof previousUpdatedAt === "string"
+                ? "entityType = :entityType AND tenantId = :tenantId AND updatedAt = :previousUpdatedAt"
+                : "entityType = :entityType AND tenantId = :tenantId AND attribute_not_exists(updatedAt)",
+              ExpressionAttributeValues: {
+                ...commonExpressionAttributeValues,
+                ":criteriaUpdatedAt": now,
+                ":gsi1sk": updatedFields.GSI1SK,
+                ":gsi2pk": updatedFields.GSI2PK,
+                ":gsi2sk": updatedFields.GSI2SK,
+                ":entityType": "JOB",
+                ":tenantId": auth.tenantId,
+                ...(typeof previousUpdatedAt === "string"
+                  ? { ":previousUpdatedAt": previousUpdatedAt }
+                  : {}),
+              },
+            },
+          },
+          {
+            Update: {
+              TableName: tableName,
+              Key: { PK: publicJobsPk(), SK: publicJobSk(jobId) },
+              UpdateExpression: publicUpdateExpression,
+              ExpressionAttributeNames: { "#location": "location" },
+              ConditionExpression: "entityType = :publicEntityType AND tenantId = :tenantId",
+              ExpressionAttributeValues: {
+                ...commonExpressionAttributeValues,
+                ":tenantId": auth.tenantId,
+                ":publicEntityType": "PUBLIC_JOB",
+              },
+            },
+          },
+        ],
+      })
+    );
+  } catch (error) {
+    const transactionError = error as Error & {
+      CancellationReasons?: Array<{ Code?: string }>;
+    };
+    console.error("Job details update failed", {
+      jobId,
+      tenantId: auth.tenantId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    if (
+      transactionError.name === "TransactionCanceledException" &&
+      transactionError.CancellationReasons?.some((reason) => reason.Code === "ConditionalCheckFailed")
+    ) {
+      return json(409, {
+        message: "This job changed while you were editing it. Reload the job and try again.",
+      });
+    }
+    throw error;
+  }
+
+  const updatedJob = {
+    ...existingJob.Item,
+    ...updatedFields,
+    publicTenantSlug,
+    publicSlug,
+  };
+  if (!validJob.salaryRange) {
+    delete updatedJob.salaryRange;
+  }
+
+  return json(200, { job: updatedJob });
+}
+
 async function handler(
   event: APIGatewayProxyEventV2,
   auth: AuthContext
@@ -316,6 +565,11 @@ async function handler(
   }
   if (method === "POST") {
     return createJob(event, auth);
+  }
+  if (method === "PATCH" && (getPathParam(event, "jobId") || getPathParam(event, "id"))) {
+    return getRawPath(event).endsWith("/status")
+      ? updateJobStatus(event, auth)
+      : updateJobDetails(event, auth);
   }
   if (getPathParam(event, "jobId") || getPathParam(event, "id")) {
     return getJob(event, auth);
